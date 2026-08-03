@@ -16,19 +16,22 @@ export default function AuditManagement() {
   const [auditData, setAuditData] = useState([]);
   const [loading, setLoading] = useState(true);
 
+// Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   useEffect(() => {
     fetchAuditLogs();
-  }, []);
+  }, [currentPage, rowsPerPage]);
   //api 
   const fetchAuditLogs = async () => {
     try {
       setLoading(true);
 
-      const response = await getAuditLogs();
+      const response = await getAuditLogs(currentPage, rowsPerPage);
 
       const data = response.data.map((item, index) => ({
-        id: index + 1,
+        id: (currentPage - 1) * rowsPerPage + index + 1,
         action: item.action,
         frameNumber: item.frame || "N/A",
         details: item.details || "N/A",
@@ -45,16 +48,10 @@ export default function AuditManagement() {
     }
   };
 
-  // Pagination State
-  const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+ 
 
   // Pagination Calculations
-  const totalPages = Math.ceil(auditData.length / rowsPerPage) || 1;
-  const paginatedData = useMemo(() => {
-    const startIndex = (currentPage - 1) * rowsPerPage;
-    return auditData.slice(startIndex, startIndex + rowsPerPage);
-  }, [auditData, currentPage, rowsPerPage]);
+  const paginatedData = auditData;
 
   // Color Mapping Helper for Status Text
   const renderColoredStatus = (status) => {
@@ -157,18 +154,18 @@ export default function AuditManagement() {
                       <td className="py-3.5 px-4 font-semibold text-[#0B1E48]">
                         <span
                           className={`font-semibold ${row.action?.toUpperCase() === "CREATE"
-                              ? "text-emerald-600"
-                              : row.action?.toUpperCase() === "READ"
-                                ? "text-cyan-600"
-                                : row.action?.toUpperCase() === "UPDATE"
-                                  ? "text-blue-600"
-                                  : row.action?.toUpperCase() === "DELETE"
+                            ? "text-emerald-600"
+                            : row.action?.toUpperCase() === "READ"
+                              ? "text-cyan-600"
+                              : row.action?.toUpperCase() === "UPDATE"
+                                ? "text-blue-600"
+                                : row.action?.toUpperCase() === "DELETE"
+                                  ? "text-red-600"
+                                  : row.action?.toUpperCase() === "BULK_DELETE"
                                     ? "text-red-600"
-                                    : row.action?.toUpperCase() === "BULK_DELETE"
-                                      ? "text-red-600"
-                                      : row.action?.toUpperCase() === "UPLOAD"
-                                        ? "text-emerald-600"
-                                        : "text-slate-700"
+                                    : row.action?.toUpperCase() === "UPLOAD"
+                                      ? "text-emerald-600"
+                                      : "text-slate-700"
                             }`}
                         >
                           {row.action?.toUpperCase()}
@@ -232,8 +229,9 @@ export default function AuditManagement() {
               <option value={20}>20</option>
             </select>
             <span className="ml-2 text-slate-400">
-              Showing {auditData.length > 0 ? (currentPage - 1) * rowsPerPage + 1 : 0} to{" "}
-              {Math.min(currentPage * rowsPerPage, auditData.length)} of {auditData.length} entries
+              Showing {auditData.length > 0 ? (currentPage - 1) * rowsPerPage + 1 : 0}
+              to {(currentPage - 1) * rowsPerPage + auditData.length}
+              entries
             </span>
           </div>
 
@@ -256,20 +254,22 @@ export default function AuditManagement() {
             </button>
 
             <span className="px-3 py-1 bg-[#0B1E48] text-white font-semibold rounded">
-              {currentPage} / {totalPages}
+              {currentPage}
             </span>
-
             <button
-              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages}
+              onClick={() => {
+                if (auditData.length === rowsPerPage) {
+                  setCurrentPage((prev) => prev + 1);
+                }
+              }}
+              disabled={auditData.length < rowsPerPage}
               className="p-1.5 bg-white border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-40 transition"
               title="Next Page"
             >
               <FiChevronRight className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setCurrentPage(totalPages)}
-              disabled={currentPage === totalPages}
+              disabled={true}
               className="p-1.5 bg-white border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-40 transition"
               title="Last Page"
             >

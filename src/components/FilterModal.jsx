@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 
-const FilterModal= ({ isOpen, onClose, inventory = [], filters, setFilters }) => {
+const FilterModal = ({ isOpen, onClose, inventory = [], filters, setFilters }) => {
   // Extract unique option values dynamically from current inventory prop
   const getUnique = (key) => [
     ...new Set(inventory.map((item) => item[key]).filter(Boolean)),
@@ -46,9 +46,8 @@ const FilterModal= ({ isOpen, onClose, inventory = [], filters, setFilters }) =>
 
   return (
     <div
-      className={`fixed inset-0 z-50 overflow-hidden transition-opacity duration-300 ${
-        isOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
-      }`}
+      className={`fixed inset-0 z-50 overflow-hidden transition-opacity duration-300 ${isOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+        }`}
     >
       {/* Backdrop */}
       <div
@@ -60,9 +59,8 @@ const FilterModal= ({ isOpen, onClose, inventory = [], filters, setFilters }) =>
       <div className="fixed inset-y-0 right-0 flex max-w-full">
         {/* Drawer Panel */}
         <div
-          className={`w-screen max-w-[400px] h-full bg-white shadow-xl flex flex-col transform transition-transform duration-300 ease-in-out ${
-            isOpen ? "translate-x-0" : "translate-x-full"
-          }`}
+          className={`w-screen max-w-[400px] h-full bg-white shadow-xl flex flex-col transform transition-transform duration-300 ease-in-out ${isOpen ? "translate-x-0" : "translate-x-full"
+            }`}
         >
           {/* Header */}
           <div className="bg-[#0F172A] text-white p-5 flex items-center justify-between shrink-0">
@@ -87,7 +85,7 @@ const FilterModal= ({ isOpen, onClose, inventory = [], filters, setFilters }) =>
           {/* Form Body */}
           <form onSubmit={handleApply} className="flex-1 flex flex-col min-h-0">
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              
+
               {/* Warehouse */}
               <div className="space-y-1">
                 <label className="block text-xs font-medium text-slate-700">
@@ -99,8 +97,8 @@ const FilterModal= ({ isOpen, onClose, inventory = [], filters, setFilters }) =>
                   className="h-[44px] w-full px-3 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-slate-800 transition-colors"
                 >
                   <option value="">All Warehouses</option>
-                 {getUnique("location").map((item) => (        
-                <option key={item} value={item}>
+                  {getUnique("location").map((item) => (
+                    <option key={item} value={item}>
                       {item}
                     </option>
                   ))}
@@ -177,8 +175,8 @@ const FilterModal= ({ isOpen, onClose, inventory = [], filters, setFilters }) =>
                     className="h-[44px] w-full px-3 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-slate-800 transition-colors"
                   >
                     <option value="">All Colors</option>
-                  {getUnique("colorName").map((item) => (        
-                  <option key={item} value={item}>
+                    {getUnique("colorName").map((item) => (
+                      <option key={item} value={item}>
                         {item}
                       </option>
                     ))}
@@ -214,14 +212,14 @@ const FilterModal= ({ isOpen, onClose, inventory = [], filters, setFilters }) =>
                     type="date"
                     value={filters.mfgFrom || ""}
                     onChange={(e) => updateFilter("mfgFrom", e.target.value)}
-                    placeholder="From"
+                    max={filters.mfgTo || undefined}
                     className="h-[44px] w-full px-3 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-slate-800 transition-colors"
                   />
                   <input
                     type="date"
                     value={filters.mfgTo || ""}
                     onChange={(e) => updateFilter("mfgTo", e.target.value)}
-                    placeholder="To"
+                    min={filters.mfgFrom || undefined}
                     className="h-[44px] w-full px-3 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-slate-800 transition-colors"
                   />
                 </div>
@@ -237,14 +235,14 @@ const FilterModal= ({ isOpen, onClose, inventory = [], filters, setFilters }) =>
                     type="date"
                     value={filters.transferFrom || ""}
                     onChange={(e) => updateFilter("transferFrom", e.target.value)}
-                    placeholder="From"
+                    max={filters.transferTo || undefined}
                     className="h-[44px] w-full px-3 bg-white border border-slate-200 rounded-xl text-xs font-normal text-slate-800 focus:outline-none focus:border-slate-800 transition-colors"
                   />
                   <input
                     type="date"
                     value={filters.transferTo || ""}
                     onChange={(e) => updateFilter("transferTo", e.target.value)}
-                    placeholder="To"
+                    min={filters.transferFrom || undefined}
                     className="h-[44px] w-full px-3 bg-white border border-slate-200 rounded-xl text-xs font-normal text-slate-800 focus:outline-none focus:border-slate-800 transition-colors"
                   />
                 </div>
