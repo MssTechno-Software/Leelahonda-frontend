@@ -11,7 +11,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 
-import logo from "../assets/logo.png";
+import logo from "../assets/side-bar-logo.png";
 const navItems = [
   {
     name: "Inventory",
