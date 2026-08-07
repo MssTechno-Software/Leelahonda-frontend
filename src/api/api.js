@@ -34,8 +34,13 @@ API.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error?.response?.status;
+    const isLoginRequest = error.config?.url === "/auth/login";
 
-    if ((status === 401 || status === 403) && !sessionHandled) {
+    if (
+      !isLoginRequest &&
+      (status === 401 || status === 403) &&
+      !sessionHandled
+    ) {
       sessionHandled = true;
 
       if (sessionExpiredHandler) {

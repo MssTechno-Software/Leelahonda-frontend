@@ -118,6 +118,7 @@ export default function Login() {
     if (!isValid) return;
 
     setLoading(true);
+    setShowLoader(true);
 
     try {
       const data = await loginUser(trimmedEmail, formData.password);
@@ -130,12 +131,11 @@ export default function Login() {
 
       setSuccessMessage("Login successful! Redirecting...");
 
-      navigate("/inventory", {
-        state: {
-          showLoader: true,
-        },
-      });
+      setTimeout(() => {
+        navigate("/inventory");
+      }, 1000);
     } catch (err) {
+      setShowLoader(false);
       // 7. Backend status-code mapping
       const statusCode = err.response?.status;
 
@@ -162,9 +162,8 @@ export default function Login() {
     <>
       {showLoader && <LeelamayiLoader loading={showLoader} />}
       <div
-        className={`min-h-screen w-full flex items-center justify-center bg-no-repeat bg-center relative transition-all duration-300 ${
-          showLoader ? "blur-sm scale-[0.98]" : ""
-        }`}
+        className={`min-h-screen w-full flex items-center justify-center bg-no-repeat bg-center relative transition-all duration-300 ${showLoader ? "blur-sm scale-[0.98]" : ""
+          }`}
         style={{
           backgroundImage: `url(${bgImage})`,
           backgroundSize: "100% 100%",
@@ -215,11 +214,10 @@ export default function Login() {
                     value={formData.email}
                     onChange={handleChange}
                     placeholder=" "
-                    className={`peer w-full h-14 pl-11 pr-4 text-sm bg-white/70 border rounded-lg focus:outline-none focus:ring-2 transition-all text-gray-800 ${
-                      errors.username
+                    className={`peer w-full h-14 pl-11 pr-4 text-sm bg-white/70 border rounded-lg focus:outline-none focus:ring-2 transition-all text-gray-800 ${errors.username
                         ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
                         : "border-gray-300 focus:border-blue-600 focus:ring-blue-500/20"
-                    }`}
+                      }`}
                   />
 
                   <label
@@ -257,11 +255,10 @@ export default function Login() {
                     value={formData.password}
                     onChange={handleChange}
                     placeholder=" "
-                    className={`peer w-full h-14 pl-11 pr-11 text-sm bg-white/70 border rounded-lg focus:outline-none focus:ring-2 transition-all text-gray-800 ${
-                      errors.password
+                    className={`peer w-full h-14 pl-11 pr-11 text-sm bg-white/70 border rounded-lg focus:outline-none focus:ring-2 transition-all text-gray-800 ${errors.password
                         ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
                         : "border-gray-300 focus:border-blue-600 focus:ring-blue-500/20"
-                    }`}
+                      }`}
                   />
 
                   <label
