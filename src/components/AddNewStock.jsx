@@ -20,7 +20,7 @@ import {
 const AddNewStock = ({
   onClose,
   onSave,
-  onBulkUpload, // Uses existing bulk upload API handler passed via props or fallback
+  onBulkUpload,
   editData,
   isEditMode,
   warehouses,

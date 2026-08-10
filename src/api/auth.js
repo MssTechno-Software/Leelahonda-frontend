@@ -26,7 +26,7 @@ export const loginUser = async (username, password) => {
     localStorage.setItem("token_type", response.data.token_type);
   }
 
-  // for user login 
+  // for user role login 
   if (response.data.role) {
     localStorage.setItem("role", response.data.role);
   }

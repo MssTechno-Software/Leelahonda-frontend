@@ -17,7 +17,9 @@ const API = axios.create({
 // Automatically attach token to every request
 API.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("access_token");
+  const token =
+  localStorage.getItem("access_token") ||
+  sessionStorage.getItem("access_token");
 
     // Don't attach token for login request
     if (token && config.url !== "/auth/login") {

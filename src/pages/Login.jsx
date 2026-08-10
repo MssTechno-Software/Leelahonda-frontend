@@ -160,16 +160,20 @@ export default function Login() {
 
   return (
     <>
-      {showLoader && <LeelamayiLoader loading={showLoader} />}
-      <div
-        className={`min-h-screen w-full flex items-center justify-center bg-no-repeat bg-center relative transition-all duration-300 ${showLoader ? "blur-sm scale-[0.98]" : ""
-          }`}
-        style={{
-          backgroundImage: `url(${bgImage})`,
-          backgroundSize: "100% 100%",
-          backgroundPosition: "center",
-        }}
-      >
+    {showLoader && (
+   <LeelamayiLoader
+  loading={showLoader}
+  disableBackdropBlur={true}
+/>
+)}
+    <div
+  className="min-h-screen w-full flex items-center justify-center bg-no-repeat bg-center relative"
+  style={{
+    backgroundImage: `url(${bgImage})`,
+    backgroundSize: "100% 100%",
+    backgroundPosition: "center",
+  }}
+>
         {/* Main Form Container */}
         <div className="w-full max-w-md flex flex-col items-center md:-translate-y-10 px-4">
           {/* Header / Branding */}

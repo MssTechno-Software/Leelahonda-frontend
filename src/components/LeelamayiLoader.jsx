@@ -101,6 +101,7 @@ const LeelamayiLoader = ({
     fadeDuration = 600,
     message = "Loading...",
     subMessage = "",
+    disableBackdropBlur = false,
 }) => {
     const [shouldRender, setShouldRender] = useState(loading);
     const [isFadingOut, setIsFadingOut] = useState(false);
@@ -129,9 +130,19 @@ const LeelamayiLoader = ({
                 role="status"
                 aria-live="polite"
                 aria-label="Loading Leelamayi application"
-                style={{ transitionDuration: `${fadeDuration}ms` }}
-                className={`fixed inset-0 z-[999999] flex flex-col items-center justify-center bg-black/5 bg-white/10 backdrop-blur-md pointer-events-auto transition-all ease-in-out ${isFadingOut ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
-                    }`}
+                style={{
+                    transitionDuration: `${fadeDuration}ms`,
+                }}
+                className={`fixed inset-0 z-[999999] flex flex-col items-center justify-center
+                 bg-white/30
+              ${!disableBackdropBlur ? "backdrop-blur-md" : ""}
+                pointer-events-auto
+              transition-all ease-in-out
+                 ${isFadingOut
+                        ? "opacity-0 scale-95"
+                        : "opacity-100 scale-100"
+                    }
+                  `}
             >
                 <div className="relative flex flex-col items-center justify-center p-4">
 
