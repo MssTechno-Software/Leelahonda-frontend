@@ -296,22 +296,7 @@ export default function Login() {
                 )}
               </div>
               {/* Checkbox & Forgot Password */}
-              <div className="flex items-center justify-between pt-1">
-                <label
-                  htmlFor="keepSignedIn"
-                  className="flex items-center text-xs sm:text-sm text-gray-700 cursor-pointer select-none font-medium"
-                >
-                  <input
-                    id="keepSignedIn"
-                    type="checkbox"
-                    name="keepSignedIn"
-                    checked={formData.keepSignedIn}
-                    onChange={handleChange}
-                    className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 accent-red-600"
-                  />
-                  <span className="ml-2">Keep me signed in</span>
-                </label>
-
+              <div className="flex items-center justify-between pt-1 pl-2">
                 <button
                   type="button"
                   onClick={() => setIsForgotModalOpen(true)}

@@ -34,7 +34,7 @@ const AddNewStock = ({
   const [dragActive, setDragActive] = useState(false);
   const [fileError, setFileError] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  
+
   // State for post-upload API response analysis
   const [uploadResult, setUploadResult] = useState(null);
 
@@ -58,7 +58,6 @@ const AddNewStock = ({
     model: "",
     variant: "",
     colorName: "",
-    colorHex: "#000000",
     location: "",
     mfgDate: "",
     transferDate: "",
@@ -85,7 +84,6 @@ const AddNewStock = ({
         model: editData.model || "",
         variant: editData.variant || "",
         colorName: editData.colorName || "",
-        colorHex: editData.colorHex || "#000000",
         location: editData.location || "",
         mfgDate: editData.mfgDate || "",
         transferDate: editData.transferDate || "",
@@ -98,7 +96,7 @@ const AddNewStock = ({
         model: "",
         variant: "",
         colorName: "",
-        colorHex: "#000000",
+
         location: "",
         mfgDate: "",
         transferDate: "",
@@ -292,7 +290,7 @@ const AddNewStock = ({
         if (res) setUploadResult(res);
         if (showToast) showToast("Inventory uploaded successfully", "success");
         if (onRefreshList) onRefreshList();
-        
+
         // Modal reset & close
         setSelectedFile(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
@@ -390,7 +388,7 @@ const AddNewStock = ({
         });
 
         xhr.open("POST", "/stock/upload-excel-binary", true);
-        
+
         // Authorization token attachment if available in localStorage/sessionStorage
         const token = localStorage.getItem("token") || localStorage.getItem("authToken");
         if (token) {
@@ -488,11 +486,10 @@ const AddNewStock = ({
                 type="button"
                 disabled={uploading}
                 onClick={() => setActiveTab("manual")}
-                className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-xl transition-all border-b-2 ${
-                  activeTab === "manual"
+                className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-xl transition-all border-b-2 ${activeTab === "manual"
                     ? "bg-white text-slate-900 border-slate-900 shadow-sm"
                     : "text-slate-500 hover:text-slate-800 border-transparent hover:bg-slate-100/60"
-                } ${uploading ? "opacity-50 cursor-not-allowed" : ""}`}
+                  } ${uploading ? "opacity-50 cursor-not-allowed" : ""}`}
               >
                 Manual Entry
               </button>
@@ -500,11 +497,10 @@ const AddNewStock = ({
                 type="button"
                 disabled={uploading}
                 onClick={() => setActiveTab("bulk")}
-                className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-xl transition-all border-b-2 ${
-                  activeTab === "bulk"
+                className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-xl transition-all border-b-2 ${activeTab === "bulk"
                     ? "bg-white text-slate-900 border-slate-900 shadow-sm"
                     : "text-slate-500 hover:text-slate-800 border-transparent hover:bg-slate-100/60"
-                } ${uploading ? "opacity-50 cursor-not-allowed" : ""}`}
+                  } ${uploading ? "opacity-50 cursor-not-allowed" : ""}`}
               >
                 Bulk CSV Upload
               </button>
@@ -527,7 +523,14 @@ const AddNewStock = ({
                   name="frameNo"
                   placeholder="e.g. ME4KC253EK00912"
                   value={form.frameNo}
-                  onChange={handleChange}
+                  onChange={(e) => {
+                    const hex = e.target.value;
+
+                    setForm((prev) => ({
+                      ...prev,
+                      colorHex: hex,
+                    }));
+                  }}
                   readOnly={isEditMode}
                   className={`w-full px-4 py-3 bg-slate-50/50 border ${errors.frameNo
                     ? "border-red-500 focus:ring-red-200"
@@ -611,32 +614,26 @@ const AddNewStock = ({
                   className="w-full px-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl text-slate-800 text-sm font-medium placeholder-slate-400 focus:outline-none focus:border-slate-800 focus:ring-4 focus:ring-slate-900/10 focus:bg-white transition-all"
                 />
               </div>
+<div className="space-y-1.5">
+  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">
+    Color
+  </label>
 
-              {/* Color */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Color
-                </label>
-                <div className="relative flex items-center">
-                  <input
-                    type="text"
-                    name="colorName"
-                    placeholder="e.g. Midnight Black"
-                    value={form.colorName}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 pr-12 bg-slate-50/50 border border-slate-200 rounded-xl text-slate-800 text-sm font-medium placeholder-slate-400 focus:outline-none focus:border-slate-800 focus:ring-4 focus:ring-slate-900/10 focus:bg-white transition-all"
-                  />
-                  <div className="absolute right-3 flex items-center gap-1.5 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
-                    <input
-                      type="color"
-                      name="colorHex"
-                      value={form.colorHex}
-                      onChange={handleChange}
-                      className="w-6 h-6 rounded-md cursor-pointer border-0 bg-transparent p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded-md"
-                    />
-                  </div>
-                </div>
-              </div>
+  <input
+    type="text"
+    name="colorName"
+    placeholder="e.g. Midnight Black"
+    value={form.colorName}
+    onChange={handleChange}
+    className="w-full px-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl text-slate-800 text-sm font-medium placeholder-slate-400 focus:outline-none focus:border-slate-800 focus:ring-4 focus:ring-slate-900/10 focus:bg-white transition-all"
+  />
+
+  {errors.colorName && (
+    <p className="text-xs text-red-500 font-medium">
+      {errors.colorName}
+    </p>
+  )}
+</div>
 
               {/* Warehouse Dropdown */}
               <div className="space-y-1.5">
@@ -804,13 +801,12 @@ const AddNewStock = ({
                 onDragLeave={handleDrag}
                 onDragOver={handleDrag}
                 onDrop={handleDrop}
-                className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300 ease-in-out flex flex-col items-center justify-center min-h-[300px] ${
-                  selectedFile
+                className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300 ease-in-out flex flex-col items-center justify-center min-h-[300px] ${selectedFile
                     ? "border-emerald-500 bg-emerald-50/20"
                     : dragActive
-                    ? "border-blue-600 bg-blue-50/50 scale-[0.99]"
-                    : "border-slate-300 bg-slate-50/40 hover:border-blue-400 hover:bg-blue-50/20"
-                } ${uploading ? "opacity-50 pointer-events-none" : ""}`}
+                      ? "border-blue-600 bg-blue-50/50 scale-[0.99]"
+                      : "border-slate-300 bg-slate-50/40 hover:border-blue-400 hover:bg-blue-50/20"
+                  } ${uploading ? "opacity-50 pointer-events-none" : ""}`}
               >
                 <input
                   ref={fileInputRef}
@@ -838,9 +834,8 @@ const AddNewStock = ({
 
                     <label
                       htmlFor="csv-file-input"
-                      className={`px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-xl cursor-pointer transition-all shadow-md hover:shadow-blue-500/20 active:scale-[0.98] inline-flex items-center gap-2 ${
-                        uploading ? "pointer-events-none opacity-50" : ""
-                      }`}
+                      className={`px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm rounded-xl cursor-pointer transition-all shadow-md hover:shadow-blue-500/20 active:scale-[0.98] inline-flex items-center gap-2 ${uploading ? "pointer-events-none opacity-50" : ""
+                        }`}
                     >
                       <Upload className="w-4 h-4" />
                       Choose File
@@ -900,9 +895,8 @@ const AddNewStock = ({
                     <div className="flex items-center gap-3">
                       <label
                         htmlFor="csv-file-input"
-                        className={`px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 font-semibold text-xs rounded-xl cursor-pointer transition-all shadow-xs flex items-center gap-1.5 ${
-                          uploading ? "pointer-events-none opacity-50" : ""
-                        }`}
+                        className={`px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 font-semibold text-xs rounded-xl cursor-pointer transition-all shadow-xs flex items-center gap-1.5 ${uploading ? "pointer-events-none opacity-50" : ""
+                          }`}
                       >
                         <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
                         Change File
@@ -953,7 +947,7 @@ const AddNewStock = ({
                   <h5 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                     Import Breakdown Summary
                   </h5>
-                  
+
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {"importedCount" in uploadResult || "imported_count" in uploadResult ? (
                       <div className="p-2.5 bg-white border border-slate-200 rounded-lg text-center">

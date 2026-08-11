@@ -11,7 +11,7 @@ import {
   FiAlertCircle,
   FiEye,
   FiEyeOff,
-  FiXCircle
+  FiXCircle,
 } from 'react-icons/fi';
 
 export default function AddUser() {
