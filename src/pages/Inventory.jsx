@@ -66,6 +66,7 @@ const Inventory = () => {
   const [savingLocation, setSavingLocation] = useState(false);
   const [recentlySavedLocationId, setRecentlySavedLocationId] = useState(null);
   const [locationDropdownOpen, setLocationDropdownOpen] = useState(false);
+  const [dropdownDirection, setDropdownDirection] = useState("down");
 
   // --- UI Enhancements State ---
   const [cardStartIndex, setCardStartIndex] = useState(0);
@@ -103,8 +104,20 @@ const Inventory = () => {
   };
 
   // --- Inline Location Handlers ---
-  const handleStartEditLocation = (item) => {
+  const handleStartEditLocation = (item, event) => {
     if (savingLocation) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+
+    const dropdownHeight = 230;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    setDropdownDirection(
+      spaceBelow < dropdownHeight && spaceAbove > dropdownHeight
+        ? "up"
+        : "down"
+    );
 
     setEditingLocationId(item.id);
     setEditingLocation(item.location || "");
@@ -828,8 +841,7 @@ const Inventory = () => {
 
         {/* ================= Live Inventory Stock Table ================= */}
         {!viewAllRegions && (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
-            {/* Table Header Controls */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-visible">            {/* Table Header Controls */}
             <div className="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <h2 className="text-lg font-bold text-slate-900 tracking-tight">
@@ -993,9 +1005,8 @@ const Inventory = () => {
                 </div>
               </div>
             </div>
-
             {/* Table Body */}
-            <div className="relative overflow-hidden">
+            <div className="relative overflow-visible">
               <div
                 className={`transition-all duration-200 ${paginationLoading || searchLoading
                   ? "opacity-50 blur-[1px]"
@@ -1217,7 +1228,12 @@ const Inventory = () => {
                                         </button>
 
                                         {locationDropdownOpen && (
-                                          <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-50 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-900/10 p-1.5">                                          {warehouseClusters.map((cluster, i) => (
+                                          <div
+                                            className={`absolute left-0 z-50 w-50 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-900/10 p-1.5 ${dropdownDirection === "up"
+                                              ? "bottom-[calc(100%+6px)]"
+                                              : "top-[calc(100%+6px)]"
+                                              }`}
+                                          >                                                      {warehouseClusters.map((cluster, i) => (
                                             <button
                                               key={i}
                                               type="button"
@@ -1322,7 +1338,7 @@ const Inventory = () => {
 
                                   <button
                                     type="button"
-                                    onClick={() => handleStartEditLocation(item)}
+                                    onClick={(e) => handleStartEditLocation(item, e)}
                                     disabled={
                                       editingLocationId !== null &&
                                       editingLocationId !== item.id

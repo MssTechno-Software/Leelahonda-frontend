@@ -985,9 +985,6 @@ const AddNewStock = ({
                       </div>
                     </div>
 
-                    <p className="text-[11px] text-slate-400 mt-2 italic">
-                      * Availability depends on backend configuration.
-                    </p>
                   </div>
                 ) : (
                   /* State 2: Selected File Preview Inside Container */
