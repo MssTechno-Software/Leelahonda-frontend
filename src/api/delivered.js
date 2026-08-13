@@ -5,14 +5,14 @@ export const getDelivered = (
   limit = 10,
   delivered_date = null,
   date_from = null,
-  date_to = null
+  date_to = null,
+  search = ""
 ) => {
   const params = {
     page,
     limit,
   };
 
-  
   if (delivered_date) {
     params.delivered_date = delivered_date;
   }
@@ -23,6 +23,10 @@ export const getDelivered = (
 
   if (date_to) {
     params.date_to = date_to;
+  }
+
+  if (search?.trim()) {
+    params.search = search.trim();
   }
 
   return API.get("/delivered", {

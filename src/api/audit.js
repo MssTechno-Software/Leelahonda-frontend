@@ -1,4 +1,14 @@
 import API from "./api";
 
-export const getAuditLogs = (page = 1, limit = 10) =>
-  API.get(`/audit_logs?page=${page}&limit=${limit}`);
+export const getAuditLogs = (
+  page = 1,
+  limit = 20,
+  search = ""
+) =>
+  API.get("/audit_logs", {
+    params: {
+      search: search.trim() || undefined,
+      page,
+      limit,
+    },
+  });

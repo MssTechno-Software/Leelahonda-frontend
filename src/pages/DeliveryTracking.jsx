@@ -24,64 +24,59 @@ export default function DeliveryTracking() {
 
   const frame = searchParams.get("frame");
   const [trackingData, setTrackingData] = useState(null);
-const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // api
- const handleVerify = async (e) => {
-  e.preventDefault();
+  const handleVerify = async (e) => {
+    e.preventDefault();
 
-const formattedQuery = searchQuery.trim();
+    const formattedQuery = searchQuery.trim();
 
-  if (!formattedQuery) {
-    setErrorMsg("Please enter a valid Frame Number.");
-    return;
-  }
+    if (!formattedQuery) {
+      setErrorMsg("Please enter a valid Frame Number.");
+      return;
+    }
 
-  try {
-    setLoading(true);
-
-    const data = await getLocationLogs(formattedQuery);
-
-    setTrackingData(data);
-    setSearchedFrameNo(formattedQuery);
-    setErrorMsg("");
-  } catch (error) {
-    setTrackingData(null);
-    setSearchedFrameNo("");
-    setErrorMsg(`No tracking data found for "${formattedQuery}".`);
-  } finally {
-    setLoading(false);
-  }
-};
-
-  // Preserved exact routing effect
- useEffect(() => {
-  if (!frame) return;
-
-  const fetchTracking = async () => {
     try {
       setLoading(true);
 
-const formattedFrame = frame;
-
-      setSearchQuery(formattedFrame);
-
-      const data = await getLocationLogs(formattedFrame);
+      const data = await getLocationLogs(formattedQuery);
 
       setTrackingData(data);
-      setSearchedFrameNo(formattedFrame);
+      setSearchedFrameNo(formattedQuery);
       setErrorMsg("");
     } catch (error) {
       setTrackingData(null);
       setSearchedFrameNo("");
-      setErrorMsg(`No tracking data found for "${frame}".`);
+      setErrorMsg(`No tracking data found for "${formattedQuery}".`);
     } finally {
       setLoading(false);
     }
   };
 
-  fetchTracking();
-}, [frame]);
+  // Preserved exact routing effect
+  useEffect(() => {
+    if (!frame) return;
+    const fetchTracking = async () => {
+      try {
+        setLoading(true);
+        const formattedFrame = frame;
+        setSearchQuery(formattedFrame);
+        const data = await getLocationLogs(formattedFrame);
+        setTrackingData(data);
+        setSearchedFrameNo(formattedFrame);
+        setErrorMsg("");
+      } catch (error) {
+        setTrackingData(null);
+        setSearchedFrameNo("");
+        setErrorMsg(`No tracking data found for "${frame}".`);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTracking();
+  }, [frame]);
 
   // Dynamic values derived directly from the API response format
   const hasRecords = trackingData && trackingData.records && trackingData.records.length > 0;
@@ -98,14 +93,14 @@ const formattedFrame = frame;
       year: "numeric",
     });
   };
-if (loading) {
-  return (
-    <LeelamayiLoader
-      loading={loading}
-      message="Loading Delivery Tracking..."
-    />
-  );
-}
+  if (loading) {
+    return (
+      <LeelamayiLoader
+        loading={loading}
+        message="Loading Delivery Tracking..."
+      />
+    );
+  }
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12 font-sans text-slate-800 antialiased">
       {/* Header */}

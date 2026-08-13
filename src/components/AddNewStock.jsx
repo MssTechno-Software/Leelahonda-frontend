@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import * as XLSX from "xlsx";
 import {
   X,
   Calendar,
@@ -16,7 +17,6 @@ import {
   AlertCircle,
   RefreshCw
 } from "lucide-react";
-
 const AddNewStock = ({
   onClose,
   onSave,
@@ -24,23 +24,22 @@ const AddNewStock = ({
   editData,
   isEditMode,
   warehouses,
-  onRefreshList, // Callback to refresh inventory list on success
-  showToast, // Optional toast notification callback (message, type)
+  onRefreshList, 
+  showToast, 
 }) => {
-  const [activeTab, setActiveTab] = useState("manual"); // "manual" | "bulk"
+  const [activeTab, setActiveTab] = useState("manual"); 
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [processingUpload, setProcessingUpload] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [fileError, setFileError] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
   // State for post-upload API response analysis
   const [uploadResult, setUploadResult] = useState(null);
-
   const fileInputRef = useRef(null);
-  const xhrRef = useRef(null); // Ref to hold active upload request for cancellation/memory leak protection
-
+  
   // Auto-hide error popup after 4.5 seconds
   useEffect(() => {
     if (errorMessage) {
@@ -65,24 +64,14 @@ const AddNewStock = ({
 
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
-
-  // Cleanup pending network request on unmount to prevent memory leaks
-  useEffect(() => {
-    return () => {
-      if (xhrRef.current) {
-        xhrRef.current.abort();
-      }
-    };
-  }, []);
-
   useEffect(() => {
     if (isEditMode && editData) {
       setForm({
         frameNo: editData.frameNo || "",
         engineNo: editData.engineNo || "",
-        product: editData.product || "",
-        model: editData.model || "",
-        variant: editData.variant || "",
+        product: editData.productName || "",
+        model: editData.modelName || editData.modelVariant || "",
+        variant: editData.modelVariant || "",
         colorName: editData.colorName || "",
         location: editData.location || "",
         mfgDate: editData.mfgDate || "",
@@ -126,6 +115,8 @@ const AddNewStock = ({
     if (!form.engineNo.trim()) newErrors.engineNo = "Engine number is required";
     if (!form.product.trim()) newErrors.product = "Product name is required";
     if (!form.model.trim()) newErrors.model = "Model / Series is required";
+    if (!form.variant.trim()) newErrors.variant = "Variant is required";
+    if (!form.colorName.trim()) newErrors.colorName = "Color is required";
     if (!form.location) newErrors.location = "Please select a warehouse location";
     if (!form.mfgDate)
       newErrors.mfgDate = "Manufacturing date is required";
@@ -142,6 +133,7 @@ const AddNewStock = ({
     try {
       setSaving(true);
       await onSave(form);
+      onClose();
     } finally {
       setSaving(false);
     }
@@ -180,7 +172,7 @@ const AddNewStock = ({
   const handleDrag = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (uploading) return;
+    if (uploading || processingUpload) return;
 
     if (e.type === "dragenter" || e.type === "dragover") {
       setDragActive(true);
@@ -193,7 +185,7 @@ const AddNewStock = ({
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    if (uploading) return;
+    if (uploading || processingUpload) return;
 
     if (e.dataTransfer.files) {
       if (e.dataTransfer.files.length > 1) {
@@ -207,7 +199,7 @@ const AddNewStock = ({
   };
 
   const handleFileChange = (e) => {
-    if (uploading) return;
+    if (uploading || processingUpload) return;
     if (e.target.files) {
       if (e.target.files.length > 1) {
         setErrorMessage("Please select only one file at a time.");
@@ -230,17 +222,187 @@ const AddNewStock = ({
     }
   };
 
+  const REQUIRED_COLUMNS = [
+    "Frame",
+    "Engine No",
+    "Product Name",
+    "Model",
+    "Variant",
+    "Color",
+    "Location",
+    "Manufacturing Date",
+    "Transfer Date",
+  ];
+
+  const normalizeHeader = (value) =>
+    String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_\/-]+/g, "");
+
+  const normalizeCellValue = (value) =>
+    value === null || value === undefined ? "" : value;
+
+  const getRequiredColumnMap = (headers) => {
+    const normalizedHeaders = headers.map(normalizeHeader);
+
+    const aliases = {
+      Frame: ["frame", "frameno", "framenumber"],
+      "Engine No": [
+        "engineno",
+        "enginenomotorno",
+        "enginemotornumber",
+        "enginenumber",
+        "engine",
+      ],
+      "Product Name": ["productname", "product"],
+      Model: ["model", "modelname", "modelseries"],
+      Variant: ["variant", "modelvariant"],
+      Color: ["color", "colorname", "colour", "colourname"],
+      Location: ["location", "warehouse", "warehouselocation"],
+      "Manufacturing Date": [
+        "manufacturingdate",
+        "manufactureddate",
+        "mfgdate",
+        "manufacturedate",
+      ],
+      "Transfer Date": [
+        "transferdate",
+        "stocktransferdate",
+        "stocktrasnferdate",
+      ],
+    };
+
+    const map = {};
+    const missing = [];
+
+    for (const required of REQUIRED_COLUMNS) {
+      const candidates = aliases[required] || [normalizeHeader(required)];
+      const index = normalizedHeaders.findIndex((header) =>
+        candidates.includes(header)
+      );
+
+      if (index === -1) {
+        missing.push(required);
+      } else {
+        map[required] = index;
+      }
+    }
+
+    return { map, missing };
+  };
+
+  const validateAndNormalizeSpreadsheet = async (file) => {
+    let workbook;
+
+    try {
+      const buffer = await file.arrayBuffer();
+      workbook = XLSX.read(buffer, {
+        type: "array",
+        cellDates: false,
+        raw: false,
+      });
+    } catch {
+      throw new Error(
+        "Unable to read this spreadsheet. Please upload a valid CSV, XLSX or XLS file."
+      );
+    }
+
+    const firstSheetName = workbook.SheetNames?.[0];
+
+    if (!firstSheetName) {
+      throw new Error("The uploaded file does not contain a worksheet.");
+    }
+
+    const worksheet = workbook.Sheets[firstSheetName];
+
+    const rows = XLSX.utils.sheet_to_json(worksheet, {
+      header: 1,
+      defval: "",
+      raw: false,
+      blankrows: false,
+    });
+
+    if (!rows.length) {
+      throw new Error("The uploaded file is empty.");
+    }
+
+    const headers = (rows[0] || []).map((value) =>
+      String(value ?? "").trim()
+    );
+
+    const { map, missing } = getRequiredColumnMap(headers);
+
+    if (missing.length) {
+      throw new Error(
+        `Missing required column${missing.length > 1 ? "s" : ""}: ${missing.join(
+          ", "
+        )}`
+      );
+    }
+
+    // Rebuild into the official column order.
+    // Extra rows: ACCEPT.
+    // Reordered columns: ACCEPT.
+    // Extra columns: IGNORE.
+    // Empty required cells: ACCEPT and pass through to backend.
+    const normalizedRows = [REQUIRED_COLUMNS];
+
+    for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+      const sourceRow = rows[rowIndex] || [];
+
+      normalizedRows.push(
+        REQUIRED_COLUMNS.map((column) =>
+          normalizeCellValue(sourceRow[map[column]])
+        )
+      );
+    }
+
+    const outputWorkbook = XLSX.utils.book_new();
+    const outputWorksheet = XLSX.utils.aoa_to_sheet(normalizedRows);
+
+    XLSX.utils.book_append_sheet(
+      outputWorkbook,
+      outputWorksheet,
+      "Inventory"
+    );
+
+    const outputBuffer = XLSX.write(outputWorkbook, {
+      bookType: "xlsx",
+      type: "array",
+    });
+
+    return new File(
+      [outputBuffer],
+      "inventory_import_normalized.xlsx",
+      {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }
+    );
+  };
+
   const handleDownloadSampleCSV = () => {
-    const csvHeader = "Frame,Engine No,Product Name,Model,Variant,Color,Location,Manufacturing Date,Transfer Date\n";
-    const sampleRow = "ME4KC253EK00912,ENG-9923841-X,SUV Electric,Series X 2026,AWD Luxury,Midnight Black,Main Warehouse,2026-01-15,2026-02-01\n";
-    const blob = new Blob([csvHeader + sampleRow], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "sample_stock_import.csv";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const sampleRows = [
+      REQUIRED_COLUMNS,
+      [
+        "ME4KC253EK00912",
+        "ENG-9923841-X",
+        "SUV Electric",
+        "Series X 2026",
+        "AWD Luxury",
+        "Midnight Black",
+        "Main Warehouse",
+        "2026-01-15",
+        "2026-02-01",
+      ],
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet(sampleRows);
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
+
+    XLSX.writeFile(workbook, "inventory_import_template.xlsx");
   };
 
   // Status message helper mapping standard HTTP error codes
@@ -275,148 +437,92 @@ const AddNewStock = ({
   const handleBulkSubmit = async (e) => {
     e.preventDefault();
 
-    // Prevent duplicate triggers or submission without valid file
-    if (!selectedFile || uploading || fileError) return;
+    if (!selectedFile || uploading || fileError || processingUpload) {
+      return;
+    }
 
     setUploading(true);
+    setProcessingUpload(false);
     setUploadProgress(0);
     setErrorMessage("");
     setUploadResult(null);
 
-    // If consumer passed an external handler onBulkUpload prop, execute it as priority
-    if (onBulkUpload) {
-      try {
-        const res = await onBulkUpload(selectedFile);
-        if (res) setUploadResult(res);
-        if (showToast) showToast("Inventory uploaded successfully", "success");
-        if (onRefreshList) onRefreshList();
-
-        // Modal reset & close
-        setSelectedFile(null);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-        onClose();
-      } catch (err) {
-        let msg = "";
-
-        switch (err?.response?.status) {
-          case 400:
-            msg =
-              "Invalid inventory file. Please upload the correct CSV/Excel file using the official Inventory Template.";
-            break;
-
-          case 401:
-            msg = "Your session has expired. Please login again.";
-            break;
-
-          case 403:
-            msg = "You don't have permission to upload inventory.";
-            break;
-
-          case 404:
-            msg = "Upload service is currently unavailable.";
-            break;
-
-          case 413:
-            msg = "The selected file is too large.";
-            break;
-
-          case 500:
-            msg =
-              "Server error occurred while importing inventory. Please try again.";
-            break;
-
-          default:
-            msg =
-              err?.response?.data?.message ||
-              "Unable to upload the inventory file.";
-        }
-
-        setErrorMessage(msg);
-
-        if (showToast) {
-          showToast(msg, "error");
-        }
-      } finally {
-        setUploading(false);
-        setUploadProgress(0);
-      }
-
-      return;
-    }
-    // Default API Execution to POST /stock/upload-excel-binary using XMLHttpRequest for progress tracking
     try {
-      const formData = new FormData();
-      // Standard binary form payload key
-      formData.append("file", selectedFile);
 
-      await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhrRef.current = xhr;
+      const normalizedFile =
+        await validateAndNormalizeSpreadsheet(selectedFile);
 
-        xhr.upload.addEventListener("progress", (event) => {
-          if (event.lengthComputable) {
-            const percentComplete = Math.round((event.loaded / event.total) * 100);
-            setUploadProgress(percentComplete);
-          }
-        });
 
-        xhr.addEventListener("load", () => {
-          xhrRef.current = null;
-          let parsedResponse = null;
-          try {
-            parsedResponse = xhr.responseText ? JSON.parse(xhr.responseText) : {};
-          } catch (pErr) {
-            parsedResponse = {};
-          }
+      const response = await onBulkUpload(
+        normalizedFile,
+        (progress) => {
+          const safeProgress = Math.max(
+            0,
+            Math.min(95, Number(progress) || 0)
+          );
 
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve(parsedResponse);
-          } else {
-            const errorText = getHttpStatusErrorMessage(xhr.status, parsedResponse);
-            reject({ status: xhr.status, message: errorText, response: parsedResponse });
-          }
-        });
-
-        xhr.addEventListener("error", () => {
-          xhrRef.current = null;
-          reject({ status: 0, message: "Network error occurred during upload. Please check connection." });
-        });
-
-        xhr.addEventListener("abort", () => {
-          xhrRef.current = null;
-          reject({ status: 0, message: "Upload operation was cancelled." });
-        });
-
-        xhr.open("POST", "/stock/upload-excel-binary", true);
-
-        // Authorization token attachment if available in localStorage/sessionStorage
-        const token = localStorage.getItem("token") || localStorage.getItem("authToken");
-        if (token) {
-          xhr.setRequestHeader("Authorization", token.startsWith("Bearer ") ? token : `Bearer ${token}`);
+          setUploadProgress(safeProgress);
+          setProcessingUpload(false);
         }
+      );
 
-        xhr.send(formData);
-      });
-
-      // Handle Success
-      if (showToast) showToast("Inventory records uploaded successfully", "success");
-      if (onRefreshList) onRefreshList();
-
-      // State Cleanup & Modal Close
-      setSelectedFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      // Upload is complete; backend processing may still be finishing.
       setUploadProgress(0);
-      onClose();
+      setProcessingUpload(true);
+      setUploadResult(response || null);
 
-    } catch (err) {
-      setErrorMessage(err.message || "An unexpected error occurred during inventory import.");
-      if (err.response) {
-        setUploadResult(err.response);
+      /*
+       * Refresh only after the upload API has successfully resolved.
+       * This keeps the old parent-controlled data flow intact.
+       */
+      if (onRefreshList) {
+        await onRefreshList();
       }
-      if (showToast) showToast(err.message || "Upload failed", "error");
+
+      if (showToast) {
+        showToast(
+          "Inventory records uploaded successfully",
+          "success"
+        );
+      }
+
+      // Clear selected file before closing.
+      setSelectedFile(null);
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+
+      // Close only after successful API response + refresh.
+      onClose();
+    } catch (err) {
+      const status = err?.response?.status;
+      const responseData = err?.response?.data;
+
+      let message;
+
+      if (status) {
+        // API actually responded
+        message = getHttpStatusErrorMessage(status, responseData);
+      } else {
+        // API call ki mundhe frontend lo error vachindi
+        message =
+          err?.message ||
+          "Unable to prepare the inventory file. Please check the file and try again.";
+      }
+
+      setErrorMessage(message);
+
+      if (err?.response?.data) {
+        setUploadResult(err.response.data);
+      }
+
+      if (showToast) {
+        showToast(message, "error");
+      }
     } finally {
       setUploading(false);
-      xhrRef.current = null;
+      setProcessingUpload(false);
     }
   };
 
@@ -425,7 +531,6 @@ const AddNewStock = ({
       {/* Blurred Backdrop */}
       <div
         className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
-        onClick={uploading ? undefined : onClose}
         aria-hidden="true"
       />
 
@@ -434,11 +539,11 @@ const AddNewStock = ({
 
         {/* Floating Error Toast Popup (Top-Center over Modal Content) */}
         {errorMessage && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-md px-4 transition-all duration-300 animate-in fade-in slide-in-from-top-4">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4">
             <div className="flex items-center justify-between gap-3 p-3.5 bg-red-600 text-white rounded-xl shadow-xl border border-red-500/50">
               <div className="flex items-center gap-2.5 min-w-0">
                 <AlertCircle className="w-5 h-5 shrink-0 text-white" />
-                <p className="text-xs font-semibold leading-snug truncate">
+                <p className="text-xs font-semibold leading-snug break-words whitespace-normal">
                   {errorMessage}
                 </p>
               </div>
@@ -469,7 +574,7 @@ const AddNewStock = ({
 
           <button
             onClick={onClose}
-            disabled={uploading || saving}
+            disabled={uploading || processingUpload || saving}
             type="button"
             className="p-2.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100/80 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400/50 disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="Close Modal"
@@ -484,22 +589,22 @@ const AddNewStock = ({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                disabled={uploading}
+                disabled={uploading || processingUpload}
                 onClick={() => setActiveTab("manual")}
                 className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-xl transition-all border-b-2 ${activeTab === "manual"
-                    ? "bg-white text-slate-900 border-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-800 border-transparent hover:bg-slate-100/60"
+                  ? "bg-white text-slate-900 border-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800 border-transparent hover:bg-slate-100/60"
                   } ${uploading ? "opacity-50 cursor-not-allowed" : ""}`}
               >
                 Manual Entry
               </button>
               <button
                 type="button"
-                disabled={uploading}
+                disabled={uploading || processingUpload}
                 onClick={() => setActiveTab("bulk")}
                 className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-xl transition-all border-b-2 ${activeTab === "bulk"
-                    ? "bg-white text-slate-900 border-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-800 border-transparent hover:bg-slate-100/60"
+                  ? "bg-white text-slate-900 border-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800 border-transparent hover:bg-slate-100/60"
                   } ${uploading ? "opacity-50 cursor-not-allowed" : ""}`}
               >
                 Bulk CSV Upload
@@ -523,14 +628,7 @@ const AddNewStock = ({
                   name="frameNo"
                   placeholder="e.g. ME4KC253EK00912"
                   value={form.frameNo}
-                  onChange={(e) => {
-                    const hex = e.target.value;
-
-                    setForm((prev) => ({
-                      ...prev,
-                      colorHex: hex,
-                    }));
-                  }}
+                  onChange={handleChange}
                   readOnly={isEditMode}
                   className={`w-full px-4 py-3 bg-slate-50/50 border ${errors.frameNo
                     ? "border-red-500 focus:ring-red-200"
@@ -603,7 +701,7 @@ const AddNewStock = ({
               {/* Variant */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Variant
+                  Variant <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -611,34 +709,45 @@ const AddNewStock = ({
                   placeholder="e.g. AWD Luxury Edition"
                   value={form.variant}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl text-slate-800 text-sm font-medium placeholder-slate-400 focus:outline-none focus:border-slate-800 focus:ring-4 focus:ring-slate-900/10 focus:bg-white transition-all"
+                  className={`w-full px-4 py-3 bg-slate-50/50 border ${errors.variant
+                    ? "border-red-500 focus:ring-red-200"
+                    : "border-slate-200 focus:border-slate-800 focus:ring-slate-900/10"
+                    } rounded-xl text-slate-800 text-sm font-medium placeholder-slate-400 focus:outline-none focus:ring-4 focus:bg-white transition-all`}
                 />
+                {errors.variant && (
+                  <p className="text-xs text-red-500 font-medium">
+                    {errors.variant}
+                  </p>
+                )}
               </div>
-<div className="space-y-1.5">
-  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">
-    Color
-  </label>
 
-  <input
-    type="text"
-    name="colorName"
-    placeholder="e.g. Midnight Black"
-    value={form.colorName}
-    onChange={handleChange}
-    className="w-full px-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl text-slate-800 text-sm font-medium placeholder-slate-400 focus:outline-none focus:border-slate-800 focus:ring-4 focus:ring-slate-900/10 focus:bg-white transition-all"
-  />
-
-  {errors.colorName && (
-    <p className="text-xs text-red-500 font-medium">
-      {errors.colorName}
-    </p>
-  )}
-</div>
+              {/* Color */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Color <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="colorName"
+                  placeholder="e.g. Midnight Black"
+                  value={form.colorName}
+                  onChange={handleChange}
+                  className={`w-full px-4 py-3 bg-slate-50/50 border ${errors.colorName
+                    ? "border-red-500 focus:ring-red-200"
+                    : "border-slate-200 focus:border-slate-800 focus:ring-slate-900/10"
+                    } rounded-xl text-slate-800 text-sm font-medium placeholder-slate-400 focus:outline-none focus:ring-4 focus:bg-white transition-all`}
+                />
+                {errors.colorName && (
+                  <p className="text-xs text-red-500 font-medium">
+                    {errors.colorName}
+                  </p>
+                )}
+              </div>
 
               {/* Warehouse Dropdown */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Warehouse <span className="text-red-500">*</span>
+                  Location <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <select
@@ -669,7 +778,7 @@ const AddNewStock = ({
               {/* Manufacturing Date */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Manufacturing Date
+                  Manufacturing Date <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <input
@@ -677,7 +786,11 @@ const AddNewStock = ({
                     name="mfgDate"
                     value={form.mfgDate}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl text-slate-800 text-sm font-medium focus:outline-none focus:border-slate-800 focus:ring-4 focus:ring-slate-900/10 focus:bg-white transition-all"
+                    max={new Date().toISOString().split("T")[0]}
+                    className={`w-full px-4 py-3 bg-slate-50/50 border ${errors.mfgDate
+                      ? "border-red-500 focus:ring-red-200"
+                      : "border-slate-200 focus:border-slate-800 focus:ring-slate-900/10"
+                      } rounded-xl text-slate-800 text-sm font-medium focus:outline-none focus:border-slate-800 focus:ring-4 focus:ring-slate-900/10 focus:bg-white transition-all`}
                   />
                   {errors.mfgDate && (
                     <p className="text-xs text-red-500 font-medium">
@@ -690,7 +803,7 @@ const AddNewStock = ({
               {/* Transfer Date */}
               <div className="space-y-1.5 md:col-span-2">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Transfer Date
+                  Transfer Date <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <input
@@ -698,7 +811,11 @@ const AddNewStock = ({
                     name="transferDate"
                     value={form.transferDate}
                     onChange={handleChange}
-                    className="w-full md:w-1/2 px-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl text-slate-800 text-sm font-medium focus:outline-none focus:border-slate-800 focus:ring-4 focus:ring-slate-900/10 focus:bg-white transition-all"
+                    min={form.mfgDate || undefined}
+                    className={`w-full md:w-1/2 px-4 py-3 bg-slate-50/50 border ${errors.transferDate
+                      ? "border-red-500 focus:ring-red-200"
+                      : "border-slate-200 focus:border-slate-800 focus:ring-slate-900/10"
+                      } rounded-xl text-slate-800 text-sm font-medium focus:outline-none focus:border-slate-800 focus:ring-4 focus:ring-slate-900/10 focus:bg-white transition-all`}
                   />{errors.transferDate && (
                     <p className="text-xs text-red-500 font-medium">
                       {errors.transferDate}
@@ -751,21 +868,31 @@ const AddNewStock = ({
                     <div className="flex items-center gap-2">
                       <Loader2 className="w-4 h-4 text-blue-600 animate-spin shrink-0" />
                       <p className="text-xs font-bold text-blue-900">
-                        Uploading inventory... ({uploadProgress}%)
+                        {processingUpload
+                          ? "Processing inventory..."
+                          : `Uploading inventory... (${uploadProgress}%)`}
                       </p>
                     </div>
-                    <span className="text-xs font-bold text-blue-700">{uploadProgress}%</span>
+                    <span className="text-xs font-bold text-blue-700">
+                      {processingUpload
+                        ? "Processing..."
+                        : `${uploadProgress}%`}
+                    </span>
                   </div>
 
                   <div className="w-full bg-blue-200/60 rounded-full h-2 overflow-hidden">
                     <div
                       className="bg-blue-600 h-2 rounded-full transition-all duration-200 ease-out"
-                      style={{ width: `${uploadProgress}%` }}
+                      style={{
+                        width: `${processingUpload ? 100 : uploadProgress}%`,
+                      }}
                     />
                   </div>
 
                   <p className="text-xs text-blue-700">
-                    Please wait while we validate and import your records.
+                    {processingUpload
+                      ? "File uploaded. Please wait while the server validates and imports your records."
+                      : "Please wait while your inventory file is being uploaded."}
                   </p>
                 </div>
               )}
@@ -802,10 +929,10 @@ const AddNewStock = ({
                 onDragOver={handleDrag}
                 onDrop={handleDrop}
                 className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300 ease-in-out flex flex-col items-center justify-center min-h-[300px] ${selectedFile
-                    ? "border-emerald-500 bg-emerald-50/20"
-                    : dragActive
-                      ? "border-blue-600 bg-blue-50/50 scale-[0.99]"
-                      : "border-slate-300 bg-slate-50/40 hover:border-blue-400 hover:bg-blue-50/20"
+                  ? "border-emerald-500 bg-emerald-50/20"
+                  : dragActive
+                    ? "border-blue-600 bg-blue-50/50 scale-[0.99]"
+                    : "border-slate-300 bg-slate-50/40 hover:border-blue-400 hover:bg-blue-50/20"
                   } ${uploading ? "opacity-50 pointer-events-none" : ""}`}
               >
                 <input
@@ -813,7 +940,7 @@ const AddNewStock = ({
                   type="file"
                   accept=".csv, .xlsx, .xls"
                   onChange={handleFileChange}
-                  disabled={uploading}
+                  disabled={uploading || processingUpload}
                   className="hidden"
                   id="csv-file-input"
                 />
@@ -905,7 +1032,7 @@ const AddNewStock = ({
                       <button
                         type="button"
                         onClick={handleRemoveFile}
-                        disabled={uploading}
+                        disabled={uploading || processingUpload}
                         className="px-4 py-2 bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 font-semibold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Trash2 className="w-3.5 h-3.5 text-red-500" />
@@ -933,7 +1060,7 @@ const AddNewStock = ({
                 <button
                   type="button"
                   onClick={handleDownloadSampleCSV}
-                  disabled={uploading}
+                  disabled={uploading || processingUpload}
                   className="px-4 py-2 bg-white border border-emerald-600 text-emerald-700 hover:bg-emerald-50 font-semibold text-xs rounded-xl transition-all shadow-2xs flex items-center gap-2 shrink-0 active:scale-[0.98] disabled:opacity-50"
                 >
                   <Download className="w-4 h-4 text-emerald-600" />
@@ -1016,7 +1143,7 @@ const AddNewStock = ({
                 <button
                   type="button"
                   onClick={onClose}
-                  disabled={uploading}
+                  disabled={uploading || processingUpload}
                   className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 font-semibold text-sm rounded-xl hover:bg-slate-50 hover:border-slate-300 active:scale-[0.98] transition-all shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
@@ -1024,7 +1151,7 @@ const AddNewStock = ({
 
                 <button
                   type="submit"
-                  disabled={!selectedFile || uploading || !!fileError}
+                  disabled={!selectedFile || uploading || processingUpload || !!fileError}
                   className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm rounded-xl transition-all shadow-md hover:shadow-blue-500/20 flex items-center justify-center gap-2 active:scale-[0.98] min-w-[170px]"
                 >
                   {uploading ? (

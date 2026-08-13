@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getUsers, updateUser, deleteUser } from "../api/users";
+import { getStocks } from "../api/stocks";
 import {
   FiSearch,
   FiRefreshCw,
@@ -20,7 +21,8 @@ import {
   FiCheckCircle,
   FiAlertCircle,
   FiCheck,
-  FiAlertTriangle
+  FiAlertTriangle, FiEye,
+  FiEyeOff
 } from 'react-icons/fi';
 import LeelamayiLoader from "../components/LeelamayiLoader";
 
@@ -40,9 +42,16 @@ export default function UserManagement() {
     email: '',
     phone: '',
     password: '',
+    confirmPassword: '',
     role: '',
     location: ''
   });
+
+  //update passwrod states 
+  const [showUpdatePassword, setShowUpdatePassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [editErrors, setEditErrors] = useState({});
   const [isUpdating, setIsUpdating] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
@@ -50,7 +59,7 @@ export default function UserManagement() {
   // Custom Modal States
   const [deleteModalState, setDeleteModalState] = useState({ isOpen: false, user: null });
   const [isDeleting, setIsDeleting] = useState(false);
-  
+
   const [successModalState, setSuccessModalState] = useState({ isOpen: false, message: '' });
   const [errorModalState, setErrorModalState] = useState({ isOpen: false, message: '' });
 
@@ -66,8 +75,7 @@ export default function UserManagement() {
     "user",
   ];
 
-  const locations = [...new Set(users.map(user => user.location).filter(Boolean))];
-
+  const [locations, setLocations] = useState([]);
   // Helper for Initials
   const getInitials = (firstName, lastName) => {
     return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase();
@@ -99,8 +107,25 @@ export default function UserManagement() {
     }
   };
 
+  const fetchLocations = async () => {
+    try {
+      const response = await getStocks("all", "", 1, 100);
+
+      const data = response?.data || {};
+
+      const locationNames = (data.by_location || [])
+        .map((item) => item?.location)
+        .filter(Boolean);
+
+      setLocations([...new Set(locationNames)]);
+    } catch (error) {
+      console.error("Failed to fetch locations:", error);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchLocations();
   }, []);
 
   // ESC Key Listener for Delete Modal
@@ -171,10 +196,14 @@ export default function UserManagement() {
       lastName: user.lastName || '',
       email: user.email || '',
       phone: user.phone || '',
-      password: user.password || 'Password123',
+      password: '',
+      confirmPassword: '',
       role: user.role || '',
       location: user.location || ''
     });
+    setShowUpdatePassword(false);
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
     setEditErrors({});
   };
 
@@ -205,10 +234,18 @@ export default function UserManagement() {
       newErrors.phone = 'Please enter a valid phone number.';
     }
 
-    if (!editFormData.password) {
-      newErrors.password = 'Password is required.';
-    } else if (editFormData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters long.';
+    if (editFormData.password) {
+      if (editFormData.password.length < 8) {
+        newErrors.password = 'Password must be at least 8 characters long.';
+      }
+
+      if (!editFormData.confirmPassword) {
+        newErrors.confirmPassword = 'Please confirm the new password.';
+      } else if (editFormData.password !== editFormData.confirmPassword) {
+        newErrors.confirmPassword = 'Passwords do not match.';
+      }
+    } else if (editFormData.confirmPassword) {
+      newErrors.password = 'Please enter the new password.';
     }
 
     if (!editFormData.role) newErrors.role = 'Role selection is required.';
@@ -221,20 +258,20 @@ export default function UserManagement() {
   // update user api
   const handleUpdateSubmit = async (e) => {
     e.preventDefault();
-
     if (!validateEditForm()) return;
-
     try {
       setIsUpdating(true);
 
-      await updateUser(editingUser.id, {
+      const updatePayload = {
         first_name: editFormData.firstName,
         last_name: editFormData.lastName,
         username: editFormData.email,
         phone_no: editFormData.phone,
         location: editFormData.location,
         role: editFormData.role,
-      });
+      };
+
+      await updateUser(editingUser.id, updatePayload);
 
       await fetchUsers();
 
@@ -249,6 +286,76 @@ export default function UserManagement() {
         isOpen: true,
         message: backendMessage || "Failed to update user."
       });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+  // Update Password API
+  const handlePasswordUpdate = async () => {
+    const newErrors = {};
+
+    if (!editFormData.password) {
+      newErrors.password = 'Please enter the new password.';
+    } else if (editFormData.password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters long.';
+    }
+
+    if (!editFormData.confirmPassword) {
+      newErrors.confirmPassword = 'Please confirm the new password.';
+    } else if (
+      editFormData.password !== editFormData.confirmPassword
+    ) {
+      newErrors.confirmPassword = 'Passwords do not match.';
+    }
+
+    setEditErrors((prev) => ({
+      ...prev,
+      password: newErrors.password || null,
+      confirmPassword: newErrors.confirmPassword || null,
+    }));
+
+    if (Object.keys(newErrors).length > 0) {
+      return;
+    }
+
+    try {
+      setIsUpdating(true);
+
+      await updateUser(editingUser.id, {
+        password: editFormData.password,
+      });
+
+      setShowUpdatePassword(false);
+      setShowNewPassword(false);
+      setShowConfirmPassword(false);
+
+      setEditFormData((prev) => ({
+        ...prev,
+        password: '',
+        confirmPassword: '',
+      }));
+
+      setEditErrors((prev) => ({
+        ...prev,
+        password: null,
+        confirmPassword: null,
+      }));
+
+      setSuccessModalState({
+        isOpen: true,
+        message: 'Password updated successfully.',
+      });
+
+    } catch (error) {
+      console.error('Update Password Error:', error);
+
+      const backendMessage = error?.response?.data?.detail;
+
+      setErrorModalState({
+        isOpen: true,
+        message: backendMessage || 'Failed to update password.',
+      });
+
     } finally {
       setIsUpdating(false);
     }
@@ -310,7 +417,7 @@ export default function UserManagement() {
     }
 
     const headers = ["Name", "Email", "Phone Number", "Location", "Role"];
-    
+
     const rows = filteredUsers.map(user => [
       `"${`${user.firstName} ${user.lastName}`.replace(/"/g, '""')}"`,
       `"${user.email.replace(/"/g, '""')}"`,
@@ -320,10 +427,10 @@ export default function UserManagement() {
     ]);
 
     const csvContent = [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-    
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    
+
     const today = new Date().toISOString().split('T')[0];
     const link = document.createElement("a");
     link.setAttribute("href", url);
@@ -384,7 +491,7 @@ export default function UserManagement() {
             <h1 className="text-2xl font-bold text-[#0B1E48] tracking-tight uppercase">
               USERS MANAGEMENT
             </h1>
-            
+
             <p className="text-xs text-slate-500 mt-0.5">
               Manage system users, roles and permissions.
             </p>
@@ -403,7 +510,7 @@ export default function UserManagement() {
         </div>
 
         {/* 3. Main Users Table Card */}
-        <div 
+        <div
           className="bg-white rounded-2xl border border-gray-200 overflow-hidden w-full"
           style={{ boxShadow: '0 4px 12px rgba(15, 23, 42, 0.05)' }}
         >
@@ -488,7 +595,7 @@ export default function UserManagement() {
                           <button
                             onClick={() => handleDeleteUser(user.id, `${user.firstName} ${user.lastName}`)}
                             title="Delete User"
-                            className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 transition"
+                            className="p-1 hover:bg-rose-50 rounded text-red-600 hover:text-rose-600 transition"
                           >
                             <FiTrash2 className="w-3.5 h-3.5" />
                           </button>
@@ -566,7 +673,7 @@ export default function UserManagement() {
         </div>
 
         {/* Edit User Modal */}
-        {editingUser && (
+        {editingUser && !showUpdatePassword && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
               <div className="bg-[#0B1E48] text-white p-4 flex items-center justify-between">
@@ -594,9 +701,8 @@ export default function UserManagement() {
                       name="firstName"
                       value={editFormData.firstName}
                       onChange={handleEditChange}
-                      className={`w-full px-3 py-2 text-xs bg-slate-50 border ${
-                        editErrors.firstName ? 'border-rose-500' : 'border-slate-200 focus:border-[#0B1E48]'
-                      } rounded-lg focus:outline-none transition text-slate-800`}
+                      className={`w-full px-3 py-2 text-xs bg-slate-50 border ${editErrors.firstName ? 'border-rose-500' : 'border-slate-200 focus:border-[#0B1E48]'
+                        } rounded-lg focus:outline-none transition text-slate-800`}
                     />
                     {editErrors.firstName && (
                       <p className="flex items-center gap-1 text-[11px] text-rose-500 mt-1">
@@ -615,9 +721,8 @@ export default function UserManagement() {
                       name="lastName"
                       value={editFormData.lastName}
                       onChange={handleEditChange}
-                      className={`w-full px-3 py-2 text-xs bg-slate-50 border ${
-                        editErrors.lastName ? 'border-rose-500' : 'border-slate-200 focus:border-[#0B1E48]'
-                      } rounded-lg focus:outline-none transition text-slate-800`}
+                      className={`w-full px-3 py-2 text-xs bg-slate-50 border ${editErrors.lastName ? 'border-rose-500' : 'border-slate-200 focus:border-[#0B1E48]'
+                        } rounded-lg focus:outline-none transition text-slate-800`}
                     />
                     {editErrors.lastName && (
                       <p className="flex items-center gap-1 text-[11px] text-rose-500 mt-1">
@@ -636,9 +741,8 @@ export default function UserManagement() {
                       name="email"
                       value={editFormData.email}
                       onChange={handleEditChange}
-                      className={`w-full px-3 py-2 text-xs bg-slate-50 border ${
-                        editErrors.email ? 'border-rose-500' : 'border-slate-200 focus:border-[#0B1E48]'
-                      } rounded-lg focus:outline-none transition text-slate-800`}
+                      className={`w-full px-3 py-2 text-xs bg-slate-50 border ${editErrors.email ? 'border-rose-500' : 'border-slate-200 focus:border-[#0B1E48]'
+                        } rounded-lg focus:outline-none transition text-slate-800`}
                     />
                     {editErrors.email && (
                       <p className="flex items-center gap-1 text-[11px] text-rose-500 mt-1">
@@ -657,9 +761,8 @@ export default function UserManagement() {
                       name="phone"
                       value={editFormData.phone}
                       onChange={handleEditChange}
-                      className={`w-full px-3 py-2 text-xs bg-slate-50 border font-mono ${
-                        editErrors.phone ? 'border-rose-500' : 'border-slate-200 focus:border-[#0B1E48]'
-                      } rounded-lg focus:outline-none transition text-slate-800`}
+                      className={`w-full px-3 py-2 text-xs bg-slate-50 border font-mono ${editErrors.phone ? 'border-rose-500' : 'border-slate-200 focus:border-[#0B1E48]'
+                        } rounded-lg focus:outline-none transition text-slate-800`}
                     />
                     {editErrors.phone && (
                       <p className="flex items-center gap-1 text-[11px] text-rose-500 mt-1">
@@ -667,28 +770,6 @@ export default function UserManagement() {
                       </p>
                     )}
                   </div>
-
-                  {/* Password */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Password <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="password"
-                      name="password"
-                      value={editFormData.password}
-                      onChange={handleEditChange}
-                      className={`w-full px-3 py-2 text-xs bg-slate-50 border ${
-                        editErrors.password ? 'border-rose-500' : 'border-slate-200 focus:border-[#0B1E48]'
-                      } rounded-lg focus:outline-none transition text-slate-800`}
-                    />
-                    {editErrors.password && (
-                      <p className="flex items-center gap-1 text-[11px] text-rose-500 mt-1">
-                        <FiAlertCircle className="w-3 h-3" /> {editErrors.password}
-                      </p>
-                    )}
-                  </div>
-
                   {/* Role */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -698,9 +779,8 @@ export default function UserManagement() {
                       name="role"
                       value={editFormData.role}
                       onChange={handleEditChange}
-                      className={`w-full px-3 py-2 text-xs bg-slate-50 border ${
-                        editErrors.role ? 'border-rose-500' : 'border-slate-200 focus:border-[#0B1E48]'
-                      } rounded-lg focus:outline-none transition text-slate-800`}
+                      className={`w-full px-3 py-2 text-xs bg-slate-50 border ${editErrors.role ? 'border-rose-500' : 'border-slate-200 focus:border-[#0B1E48]'
+                        } rounded-lg focus:outline-none transition text-slate-800`}
                     >
                       <option value="">Select Role</option>
                       {roles.map((r) => (
@@ -717,17 +797,16 @@ export default function UserManagement() {
                   {/* Warehouse / Location */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Warehouse <span className="text-rose-500">*</span>
+                      Locations <span className="text-rose-500">*</span>
                     </label>
                     <select
                       name="location"
                       value={editFormData.location}
                       onChange={handleEditChange}
-                      className={`w-full px-3 py-2 text-xs bg-slate-50 border ${
-                        editErrors.location ? 'border-rose-500' : 'border-slate-200 focus:border-[#0B1E48]'
-                      } rounded-lg focus:outline-none transition text-slate-800`}
+                      className={`w-full px-3 py-2 text-xs bg-slate-50 border ${editErrors.location ? 'border-rose-500' : 'border-slate-200 focus:border-[#0B1E48]'
+                        } rounded-lg focus:outline-none transition text-slate-800`}
                     >
-                      <option value="">Select Warehouse</option>
+                      <option value="">Select Location</option>
                       {locations.map((l) => (
                         <option key={l} value={l}>{l}</option>
                       ))}
@@ -738,8 +817,27 @@ export default function UserManagement() {
                       </p>
                     )}
                   </div>
-                </div>
+                  {/* Update Password Trigger */}
+                  <div className="md:col-span-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUpdatePassword(true);
+                        setShowNewPassword(false);
+                        setShowConfirmPassword(false);
 
+                        setEditErrors((prev) => ({
+                          ...prev,
+                          password: null,
+                          confirmPassword: null,
+                        }));
+                      }}
+                      className="text-xs pl-1.5 font-semibold text-[#0B1E48] hover:text-blue-700 hover:underline transition"
+                    >
+                      Update Password
+                    </button>
+                  </div>
+                </div>
                 <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
                   <button
                     type="button"
@@ -770,7 +868,191 @@ export default function UserManagement() {
             </div>
           </div>
         )}
+        {/* UPDATE PASSWORD MODAL */}
+        {showUpdatePassword && (
+          <div className="fixed inset-0 z-[70] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
 
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
+
+              {/* Header */}
+              <div className="bg-[#0B1E48] text-white px-5 py-4 flex items-center justify-between">
+
+                <div>
+                  <p className="text-[10px] uppercase font-mono tracking-wider text-slate-300">
+                    USER MANAGEMENT
+                  </p>
+
+                  <h3 className="text-base font-bold">
+                    UPDATE PASSWORD
+                  </h3>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowUpdatePassword(false);
+                    setShowNewPassword(false);
+                    setShowConfirmPassword(false);
+
+                    setEditFormData((prev) => ({
+                      ...prev,
+                      password: '',
+                      confirmPassword: '',
+                    }));
+
+                    setEditErrors((prev) => ({
+                      ...prev,
+                      password: null,
+                      confirmPassword: null,
+                    }));
+                  }}
+                  className="p-1 hover:bg-white/10 rounded transition text-slate-300 hover:text-white"
+                >
+                  <FiX className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-5 space-y-4">
+
+                {/* New Password */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    New Password <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+
+                    <input
+                      type={showNewPassword ? "text" : "password"}
+                      name="password"
+                      value={editFormData.password}
+                      onChange={handleEditChange}
+                      placeholder="Enter new password"
+                      className={`w-full px-3 py-2 pr-10 text-xs bg-slate-50 border ${editErrors.password
+                        ? 'border-rose-500'
+                        : 'border-slate-200 focus:border-[#0B1E48]'
+                        } rounded-lg focus:outline-none transition text-slate-800`}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword((prev) => !prev)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                      aria-label={
+                        showNewPassword
+                          ? "Hide new password"
+                          : "Show new password"
+                      }
+                    >
+                      {showNewPassword ? (
+                        <FiEyeOff className="w-4 h-4" />
+                      ) : (
+                        <FiEye className="w-4 h-4" />
+                      )}
+                    </button>
+
+                  </div>
+
+                  {editErrors.password && (
+                    <p className="flex items-center gap-1 text-[11px] text-rose-500 mt-1">
+                      <FiAlertCircle className="w-3 h-3" />
+                      {editErrors.password}
+                    </p>
+                  )}
+
+                </div>
+
+                {/* Confirm Password */}
+                <div>
+
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Confirm Password <span className="text-rose-500">*</span>
+                  </label>
+
+                  <div className="relative">
+
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      name="confirmPassword"
+                      value={editFormData.confirmPassword}
+                      onChange={handleEditChange}
+                      placeholder="Confirm new password"
+                      className={`w-full px-3 py-2 pr-10 text-xs bg-slate-50 border ${editErrors.confirmPassword
+                        ? 'border-rose-500'
+                        : 'border-slate-200 focus:border-[#0B1E48]'
+                        } rounded-lg focus:outline-none transition text-slate-800`}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                      aria-label={
+                        showConfirmPassword
+                          ? "Hide confirm password"
+                          : "Show confirm password"
+                      }
+                    >
+                      {showConfirmPassword ? (
+                        <FiEyeOff className="w-4 h-4" />
+                      ) : (
+                        <FiEye className="w-4 h-4" />
+                      )}
+                    </button>
+
+                  </div>
+
+                  {editErrors.confirmPassword && (
+                    <p className="flex items-center gap-1 text-[11px] text-rose-500 mt-1">
+                      <FiAlertCircle className="w-3 h-3" />
+                      {editErrors.confirmPassword}
+                    </p>
+                  )}
+
+                </div>
+
+                {/* Buttons */}
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowUpdatePassword(false);
+                      setShowNewPassword(false);
+                      setShowConfirmPassword(false);
+
+                      setEditFormData((prev) => ({
+                        ...prev,
+                        password: '',
+                        confirmPassword: '',
+                      }));
+
+                      setEditErrors((prev) => ({
+                        ...prev,
+                        password: null,
+                        confirmPassword: null,
+                      }));
+                    }}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg shadow-sm transition"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handlePasswordUpdate}
+                    disabled={isUpdating}
+                    className="px-5 py-2 text-xs font-bold text-white bg-[#0B1E48] hover:bg-[#071330] rounded-lg shadow-sm transition disabled:opacity-50"
+                  >
+                    {isUpdating ? "Updating..." : "Update Password"}
+                  </button>
+
+                </div>
+
+              </div>
+            </div>
+          </div>
+        )}
         {/* CUSTOM MODAL 1: DELETE CONFIRMATION POPUP */}
         {deleteModalState.isOpen && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -813,24 +1095,47 @@ export default function UserManagement() {
 
         {/* CUSTOM MODAL 2: SUCCESS POPUP (Used for Delete & Update Success) */}
         {successModalState.isOpen && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-[16px] shadow-2xl border border-slate-100 w-full max-w-sm p-6 text-center animate-in fade-in zoom-in-95 duration-150">
-              <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FiCheck className="w-6 h-6 text-emerald-600" />
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/35 backdrop-blur-[3px]">
+            <div className="w-full max-w-[380px] bg-white rounded-2xl border border-slate-200 shadow-[0_20px_60px_rgba(15,23,42,0.18)] overflow-hidden">
+
+              {/* Success Icon */}
+              <div className="pt-7 flex justify-center">
+                <div className="w-14 h-14 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                    <FiCheckCircle className="w-5 h-5 text-emerald-600" />
+                  </div>
+                </div>
               </div>
-              <h3 className="text-lg font-bold text-slate-800 mb-2">Success</h3>
-              <p className="text-xs text-slate-500 mb-6">{successModalState.message}</p>
-              <button
-                type="button"
-                onClick={() => setSuccessModalState({ isOpen: false, message: '' })}
-                className="w-full py-2 px-4 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition"
-              >
-                OK
-              </button>
+
+              {/* Content */}
+              <div className="px-6 pt-4 pb-6 text-center">
+
+                <h3 className="text-[15px] font-bold text-slate-800">
+                  Success
+                </h3>
+
+                <p className="mt-2 text-[12px] leading-5 text-slate-500">
+                  {successModalState.message}
+                </p>
+
+                {/* Button */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSuccessModalState({
+                      isOpen: false,
+                      message: ''
+                    })
+                  }
+                  className="mt-5 w-full h-10 rounded-lg bg-[#0B1E48] hover:bg-[#081738] text-white text-xs font-semibold transition-all duration-200 shadow-sm cursor-pointer"
+                >
+                  OK
+                </button>
+
+              </div>
             </div>
           </div>
         )}
-
         {/* CUSTOM MODAL 3: ERROR POPUP */}
         {errorModalState.isOpen && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">

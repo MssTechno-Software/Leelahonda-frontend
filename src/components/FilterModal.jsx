@@ -12,10 +12,8 @@ const FilterModal = ({ isOpen, onClose, inventory = [], filters, setFilters }) =
       [key]: value,
     }));
   };
-
   const handleReset = () => {
     setFilters({
-      warehouse: "",
       product: "",
       model: "",
       variant: "",
