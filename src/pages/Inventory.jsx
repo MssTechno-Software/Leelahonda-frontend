@@ -92,8 +92,8 @@ const Inventory = () => {
   }, [searchTerm]);
   // --- Header Checkbox Ref for Indeterminate State ---
   const headerCheckboxRef = useRef(null);
- const searchRequestIdRef = useRef(0);
-const previousSearchRef = useRef("");
+  const searchRequestIdRef = useRef(0);
+  const previousSearchRef = useRef("");
   // --- Toast Helper ---
   const showToast = (message, type = "success") => {
     setToast({ show: true, message, type });
@@ -381,194 +381,202 @@ const previousSearchRef = useRef("");
     item.Location,
   ];
 
-const matchesSearch = (item, search) => {
-  const normalize = (value = "") =>
-    String(value)
-      .toLowerCase()
-      .replace(/\s+/g, "");
+  const matchesSearch = (item, search) => {
+    const normalize = (value = "") =>
+      String(value)
+        .toLowerCase()
+        .replace(/\s+/g, "");
 
-  const query = normalize(search);
-  if (!query) return true;
-  const searchableText = getSearchableFields(item)
-    .map((field) => normalize(field))
-    .join("");
-  return searchableText.includes(query);
-};
+    const query = normalize(search);
+    if (!query) return true;
+    const searchableText = getSearchableFields(item)
+      .map((field) => normalize(field))
+      .join("");
+    return searchableText.includes(query);
+  };
 
- // --- Fetch Stocks API ---
-const fetchStocks = async () => {
-  const requestId = ++searchRequestIdRef.current;
-  const searchQuery = debouncedSearch.trim();
-  const isSearchRequest = searchQuery.length > 0;
+  // --- Fetch Stocks API ---
+  const fetchStocks = async () => {
+    const requestId = ++searchRequestIdRef.current;
+    const searchQuery = debouncedSearch.trim();
+    const isSearchRequest = searchQuery.length > 0;
+    const isClearingSearch =
+      previousSearchRef.current.length > 0 && searchQuery.length === 0;
 
-  try {
-    if (isSearchRequest) {
-      setSearchLoading(true);
-    } else if (inventory.length === 0) {
-      setLoading(true);
-    } else {
-      setPaginationLoading(true);
-    }
+    try {
+      if (isSearchRequest) {
+        // User is searching
+        setSearchLoading(true);
+      } else if (isClearingSearch) {
+        // Search was cleared → full inventory reload
+        setLoading(false);
+      } else if (inventory.length === 0) {
+        // Initial page load
+        setLoading(true);
+      } else {
+        // Normal pagination / refresh
+        setPaginationLoading(true);
+      }
 
-    let finalStocks = [];
-    let finalTotal = 0;
-    let firstData = null;
+      let finalStocks = [];
+      let finalTotal = 0;
+      let firstData = null;
 
-    // =========================================================
-    // SEARCH MODE
-    // =========================================================
-    // =========================================================
-// SEARCH MODE
-// =========================================================
-if (isSearchRequest) {
- const response = await getStocks(
-  "all",
-  searchQuery,
-  currentPage,
-  selectedRows
-);
-
-if (requestId !== searchRequestIdRef.current) {
-  return;
-}
-
-const data = response?.data || {};
-
-  firstData = data;
-
-  finalStocks = (data.stocks || []).filter(
-    (item) =>
-      String(item?.Location || "").toLowerCase() !==
-      "delivered"
-  );
-
-  finalTotal =
-    data.filtered_total ??
-    data.total_remaining ??
-    finalStocks.length;
-}
-    else {
       // =========================================================
-      // NORMAL MODE
-      // Backend pagination remains unchanged
+      // SEARCH MODE
       // =========================================================
-      const response = await getStocks(
-        "all",
-        "",
-        currentPage,
-        selectedRows
-      );
+      // =========================================================
+      // SEARCH MODE
+      // =========================================================
+      if (isSearchRequest) {
+        const response = await getStocks(
+          "all",
+          searchQuery,
+          currentPage,
+          selectedRows
+        );
 
-      const data = response?.data || {};
+        if (requestId !== searchRequestIdRef.current) {
+          return;
+        }
 
-      firstData = data;
+        const data = response?.data || {};
 
-      finalStocks = (data?.stocks || []).filter(
-        (item) =>
-          String(item?.Location || "").toLowerCase() !==
-          "delivered"
-      );
+        firstData = data;
 
-      finalTotal =
-        data?.filtered_total ??
-        data?.total_remaining ??
-        0;
-    }
+        finalStocks = (data.stocks || []).filter(
+          (item) =>
+            String(item?.Location || "").toLowerCase() !==
+            "delivered"
+        );
 
-    // ===========================================================
-    // TOTAL
-    // ===========================================================
-    setTotalItems(finalTotal);
+        finalTotal =
+          data.filtered_total ??
+          data.total_remaining ??
+          finalStocks.length;
+      }
+      else {
+        // =========================================================
+        // NORMAL MODE
+        // Backend pagination remains unchanged
+        // =========================================================
+        const response = await getStocks(
+          "all",
+          "",
+          currentPage,
+          selectedRows
+        );
 
-    // ===========================================================
-    // WAREHOUSE SUMMARY
-    // ===========================================================
-    const totalRemaining =
-      Number(firstData?.total_remaining) || 0;
+        const data = response?.data || {};
 
-    setWarehouseClusters(
-      (firstData?.by_location || []).map((item) => ({
-        name: item.location,
-        units: Number(item.count) || 0,
-        percentage:
-          totalRemaining > 0
-            ? Number(
+        firstData = data;
+
+        finalStocks = (data?.stocks || []).filter(
+          (item) =>
+            String(item?.Location || "").toLowerCase() !==
+            "delivered"
+        );
+
+        finalTotal =
+          data?.filtered_total ??
+          data?.total_remaining ??
+          0;
+      }
+
+      // ===========================================================
+      // TOTAL
+      // ===========================================================
+      setTotalItems(finalTotal);
+
+      // ===========================================================
+      // WAREHOUSE SUMMARY
+      // ===========================================================
+      const totalRemaining =
+        Number(firstData?.total_remaining) || 0;
+
+      setWarehouseClusters(
+        (firstData?.by_location || []).map((item) => ({
+          name: item.location,
+          units: Number(item.count) || 0,
+          percentage:
+            totalRemaining > 0
+              ? Number(
                 (
                   ((Number(item.count) || 0) /
                     totalRemaining) *
                   100
                 ).toFixed(1)
               )
-            : 0,
-      }))
-    );
+              : 0,
+        }))
+      );
 
-    // ===========================================================
-    // INVENTORY MAPPING
-    // ===========================================================
-    const mappedStocks = finalStocks.map((item) => ({
-      id: item.id,
-      frameNo: item.Frame,
-      engineNo: item["Engine No/Motor No"],
-      modelName: item["Model Name"],
-      modelVariant: item["Model Variant"],
-      productName: item["Product Name"],
-      colorName: item.Color,
-      location: item.Location,
-      mfgDate: item["Manufacturing Date"],
-      transferDate:
-        item["Stock Trasnfer Date"] || "",
-    }));
+      // ===========================================================
+      // INVENTORY MAPPING
+      // ===========================================================
+      const mappedStocks = finalStocks.map((item) => ({
+        id: item.id,
+        frameNo: item.Frame,
+        engineNo: item["Engine No/Motor No"],
+        modelName: item["Model Name"],
+        modelVariant: item["Model Variant"],
+        productName: item["Product Name"],
+        colorName: item.Color,
+        location: item.Location,
+        mfgDate: item["Manufacturing Date"],
+        transferDate:
+          item["Stock Trasnfer Date"] || "",
+      }));
 
-    setInventory(mappedStocks);
+      setInventory(mappedStocks);
 
-  } catch (error) {
-    console.error(
-      "Failed to fetch inventory:",
-      error
-    );
+    } catch (error) {
+      console.error(
+        "Failed to fetch inventory:",
+        error
+      );
 
-    setInventory([]);
-    setTotalItems(0);
+      setInventory([]);
+      setTotalItems(0);
 
-    showToast(
-      "Failed to fetch inventory.",
-      "error"
-    );
+      showToast(
+        "Failed to fetch inventory.",
+        "error"
+      );
 
-  } finally {
-    setLoading(false);
-    setSearchLoading(false);
-    setPaginationLoading(false);
-  }
-};
-  
- useEffect(() => {
-  const searchChanged =
-    previousSearchRef.current !== debouncedSearch;
+    } finally {
+      setLoading(false);
+      setSearchLoading(false);
+      setPaginationLoading(false);
+    }
+  };
 
-  previousSearchRef.current = debouncedSearch;
+  useEffect(() => {
+    const searchChanged =
+      previousSearchRef.current !== debouncedSearch;
 
-  // Whenever a new search starts, always go to page 1 first.
-  if (searchChanged && currentPage !== 1) {
-    setCurrentPage(1);
-    return;
-  }
+    previousSearchRef.current = debouncedSearch;
 
-  fetchStocks();
+    // Whenever a new search starts, always go to page 1 first.
+    if (searchChanged && currentPage !== 1) {
+      setCurrentPage(1);
+      return;
+    }
 
-  if (location.state?.showLoader) {
-    const timer = setTimeout(() => {
-      setShowLoader(false);
-    }, 2200);
+    fetchStocks();
 
-    return () => clearTimeout(timer);
-  }
-}, [
-  currentPage,
-  selectedRows,
-  debouncedSearch,
-]);
+    if (location.state?.showLoader) {
+      const timer = setTimeout(() => {
+        setShowLoader(false);
+      }, 2200);
+
+      return () => clearTimeout(timer);
+    }
+  }, [
+    currentPage,
+    selectedRows,
+    debouncedSearch,
+  ]);
   // Reset pagination to page 1 whenever the visible row count changes.
   useEffect(() => {
     setCurrentPage(1);
@@ -703,8 +711,10 @@ const data = response?.data || {};
             {!searchLoading && searchTerm && (
               <button
                 type="button"
-                onClick={() => setSearchTerm("")}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors cursor-pointer"
+                onClick={() => {
+                  setSearchLoading(true);
+                  setSearchTerm("");
+                }} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors cursor-pointer"
                 aria-label="Clear search"
               >
                 <X className="w-4 h-4" />
@@ -987,7 +997,9 @@ const data = response?.data || {};
             {/* Table Body */}
             <div className="relative overflow-hidden">
               <div
-                className={`transition-opacity duration-200 ${paginationLoading ? "opacity-60" : "opacity-100"
+                className={`transition-all duration-200 ${paginationLoading || searchLoading
+                  ? "opacity-50 blur-[1px]"
+                  : "opacity-100 blur-0"
                   }`}
               >
                 <table className="w-full table-fixed text-left border-collapse">
@@ -1355,12 +1367,12 @@ const data = response?.data || {};
                 </table>
               </div>
 
-              {paginationLoading && (
+              {(paginationLoading || searchLoading) && (
                 <div className="absolute inset-0 flex items-center justify-center bg-white/20">
                   <div className="flex items-center gap-2.5 rounded-xl bg-white px-4 py-2.5 shadow-lg border border-slate-200">
                     <Loader2 className="w-4 h-4 text-emerald-500 animate-spin" />
                     <span className="text-xs font-semibold text-emerald-700">
-                      Loading page...
+                      {searchLoading ? "Loading inventory..." : "Loading page..."}
                     </span>
                   </div>
                 </div>

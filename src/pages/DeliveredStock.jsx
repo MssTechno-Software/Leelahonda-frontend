@@ -158,6 +158,130 @@ export default function DeliveredStocksList() {
   useEffect(() => {
     fetchDelivered();
   }, [currentPage, rowsPerPage, debouncedSearch]);
+  // color mapping - same as Inventory
+  const getClosestColor = (colorName = "") => {
+    const name = colorName.toLowerCase().trim();
+
+    // BLUE
+    if (name.includes("blue")) {
+      if (name.includes("pearl") && name.includes("shallow")) {
+        return "#6B8FB5";
+      }
+
+      if (name.includes("pearl")) {
+        return "#4F7198";
+      }
+
+      if (name.includes("athletic")) {
+        return "#315D91";
+      }
+
+      if (name.includes("decent")) {
+        return "#3F6F98";
+      }
+
+      if (name.includes("marvel")) {
+        return "#315F91";
+      }
+
+      if (name.includes("metal") || name.includes("metall")) {
+        return "#35658F";
+      }
+
+      if (name.includes("deep") || name.includes("dark")) {
+        return "#1E3A8A";
+      }
+
+      return "#2563EB";
+    }
+
+    // BLACK
+    if (name.includes("black")) {
+      if (name.includes("yellow")) {
+        return "#252525";
+      }
+
+      if (name.includes("metal") || name.includes("metall")) {
+        return "#30343B";
+      }
+
+      return "#171717";
+    }
+
+    // GRAY / GREY
+    if (name.includes("gray") || name.includes("grey")) {
+      if (name.includes("metal") || name.includes("metall")) {
+        return "#737980";
+      }
+
+      return "#6B7280";
+    }
+
+    // GROUND / DEEP GROUND
+    if (name.includes("ground")) {
+      if (name.includes("pearl") || name.includes("deep")) {
+        return "#4B4F52";
+      }
+
+      return "#62666A";
+    }
+
+    // WHITE
+    if (name.includes("white")) {
+      if (name.includes("pearl") && name.includes("misty")) {
+        return "#E9E8E3";
+      }
+
+      if (name.includes("pearl")) {
+        return "#F2F2EE";
+      }
+
+      return "#FFFFFF";
+    }
+
+    // RED
+    if (name.includes("red")) {
+      if (name.includes("sangria")) {
+        return "#7F2630";
+      }
+
+      if (name.includes("imperial")) {
+        return "#9E3030";
+      }
+
+      if (name.includes("rebel")) {
+        return "#A52A2A";
+      }
+
+      if (name.includes("metal") || name.includes("metall")) {
+        return "#9E3030";
+      }
+
+      return "#C62828";
+    }
+
+    // YELLOW
+    if (name.includes("yellow")) {
+      return "#D4A72C";
+    }
+
+    // PINK
+    if (name.includes("pink")) {
+      return "#D9468A";
+    }
+
+    // GREEN
+    if (name.includes("green")) {
+      return "#3F7D55";
+    }
+
+    // ORANGE
+    if (name.includes("orange")) {
+      return "#D97732";
+    }
+
+    return null;
+  };
 
   //help words 
   const normalizeSearchValue = (value = "") =>
@@ -478,19 +602,13 @@ export default function DeliveredStocksList() {
           {/* SINGLE-LINE TABLE WITH COMPACT HEADERS */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
             <div className="relative overflow-hidden">
-              {paginationLoading && (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/20">
-                  <div className="flex items-center gap-2.5 rounded-xl bg-white px-4 py-2.5 shadow-md border border-slate-200">
-                    <Loader2 className="w-4 h-4 text-emerald-500 animate-spin" />
 
-                    <span className="text-xs font-semibold text-emerald-700">
-                      Loading page...
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              <div className={paginationLoading ? "opacity-60" : "opacity-100"}>
+              <div
+                className={`transition-all duration-200 ${paginationLoading || searchLoading
+                    ? "opacity-50 blur-[1px]"
+                    : "opacity-100 blur-0"
+                  }`}
+              >
                 <table className="w-full table-fixed text-left border-collapse">
 
                   {/* Header */}
@@ -532,21 +650,7 @@ export default function DeliveredStocksList() {
 
                   {/* Table Body */}
                   <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-                    {searchLoading || paginationLoading ? (
-                      <tr>
-                        <td
-                          colSpan="9"
-                          className="py-10 text-center text-slate-400 text-xs"
-                        >
-                          <div className="flex items-center justify-center gap-2">
-                            <Loader2 className="w-4 h-4 text-emerald-500 animate-spin" />
-                            <span>
-                              {searchLoading ? "Searching..." : "Loading page..."}
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : filteredStocks.length > 0 ? (
+                    {filteredStocks.length > 0 ? (
                       filteredStocks.map((item) => {
 
                         const { date, time } = formatDateTime(item.deliveredDateTime);
@@ -575,9 +679,27 @@ export default function DeliveredStocksList() {
                               {item.variant || "-"}
                             </td>
 
+
                             {/* Color */}
-                            <td className="py-2.5 px-3 text-slate-600 whitespace-normal break-words">
-                              {item.colourName || "-"}
+                            <td className="py-2.5 px-3 text-[11px] font-medium text-slate-700">
+                              {item.colourName ? (
+                                <div className="flex items-center gap-2">
+                                  {getClosestColor(item.colourName) && (
+                                    <span
+                                      className="w-3 h-3 rounded-full shrink-0 border border-slate-300 shadow-sm"
+                                      style={{
+                                        backgroundColor: getClosestColor(item.colourName),
+                                      }}
+                                    />
+                                  )}
+
+                                  <span className="leading-tight whitespace-normal break-words">
+                                    {item.colourName}
+                                  </span>
+                                </div>
+                              ) : (
+                                "-"
+                              )}
                             </td>
 
                             {/* Location */}
@@ -616,6 +738,17 @@ export default function DeliveredStocksList() {
                   </tbody>
                 </table>
               </div>
+              {(paginationLoading || searchLoading) && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/20">
+                  <div className="flex items-center gap-2.5 rounded-xl bg-white px-4 py-2.5 shadow-lg border border-slate-200">
+                    <Loader2 className="w-4 h-4 text-emerald-500 animate-spin" />
+
+                    <span className="text-xs font-semibold text-emerald-700">
+                      {searchLoading ? "Loading delivered stocks..." : "Loading page..."}
+                    </span>
+                  </div>
+                </div>
+              )}
 
             </div>
 
