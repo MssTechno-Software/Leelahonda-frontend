@@ -127,6 +127,9 @@ export default function Login() {
         localStorage.setItem("token", data.access_token);
         localStorage.setItem("refresh_token", data.refresh_token);
         localStorage.setItem("token_type", data.token_type);
+
+        // Save logged-in user's role
+        localStorage.setItem("user_role", data.role);
       }
 
       setSuccessMessage("Login successful! Redirecting...");
@@ -160,20 +163,20 @@ export default function Login() {
 
   return (
     <>
-    {showLoader && (
-   <LeelamayiLoader
-  loading={showLoader}
-  disableBackdropBlur={true}
-/>
-)}
-    <div
-  className="min-h-screen w-full flex items-center justify-center bg-no-repeat bg-center relative"
-  style={{
-    backgroundImage: `url(${bgImage})`,
-    backgroundSize: "100% 100%",
-    backgroundPosition: "center",
-  }}
->
+      {showLoader && (
+        <LeelamayiLoader
+          loading={showLoader}
+          disableBackdropBlur={true}
+        />
+      )}
+      <div
+        className="min-h-screen w-full flex items-center justify-center bg-no-repeat bg-center relative"
+        style={{
+          backgroundImage: `url(${bgImage})`,
+          backgroundSize: "100% 100%",
+          backgroundPosition: "center",
+        }}
+      >
         {/* Main Form Container */}
         <div className="w-full max-w-md flex flex-col items-center md:-translate-y-10 px-4">
           {/* Header / Branding */}
@@ -219,8 +222,8 @@ export default function Login() {
                     onChange={handleChange}
                     placeholder=" "
                     className={`peer w-full h-14 pl-11 pr-4 text-sm bg-white/70 border rounded-lg focus:outline-none focus:ring-2 transition-all text-gray-800 ${errors.username
-                        ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                        : "border-gray-300 focus:border-blue-600 focus:ring-blue-500/20"
+                      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                      : "border-gray-300 focus:border-blue-600 focus:ring-blue-500/20"
                       }`}
                   />
 
@@ -260,8 +263,8 @@ export default function Login() {
                     onChange={handleChange}
                     placeholder=" "
                     className={`peer w-full h-14 pl-11 pr-11 text-sm bg-white/70 border rounded-lg focus:outline-none focus:ring-2 transition-all text-gray-800 ${errors.password
-                        ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
-                        : "border-gray-300 focus:border-blue-600 focus:ring-blue-500/20"
+                      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                      : "border-gray-300 focus:border-blue-600 focus:ring-blue-500/20"
                       }`}
                   />
 

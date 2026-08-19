@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from "react-router-dom";
 import LeelamayiLoader from "../components/LeelamayiLoader";
 import ExportPDF from "../components/ExportPDF";
 import {
-  Search,
   Plus,
   Download,
   Edit2,
@@ -32,10 +31,22 @@ import {
 } from "../api/stocks";
 import AddNewStock from "../components/AddNewStock";
 import logo from "../assets/logo.png";
+import CommonSearch from "../components/CommonSearch";
 
 const Inventory = () => {
+  const scrollbarHideStyle = `
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
+  `;
+
   const navigate = useNavigate();
   const location = useLocation();
+  const userRole = localStorage.getItem("user_role");
 
   const [showLoader, setShowLoader] = useState(
     location.state?.showLoader || false,
@@ -67,6 +78,11 @@ const Inventory = () => {
   const [recentlySavedLocationId, setRecentlySavedLocationId] = useState(null);
   const [locationDropdownOpen, setLocationDropdownOpen] = useState(false);
   const [dropdownDirection, setDropdownDirection] = useState("down");
+  const [dropdownPosition, setDropdownPosition] = useState({
+    top: 0,
+    left: 0,
+    width: 200,
+  });
 
   // --- UI Enhancements State ---
   const [cardStartIndex, setCardStartIndex] = useState(0);
@@ -84,23 +100,27 @@ const Inventory = () => {
   const [searchLoading, setSearchLoading] = useState(false);
   const [paginationLoading, setPaginationLoading] = useState(false);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchTerm);
-    }, 350);
 
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
   // --- Header Checkbox Ref for Indeterminate State ---
   const headerCheckboxRef = useRef(null);
   const searchRequestIdRef = useRef(0);
   const previousSearchRef = useRef("");
+
   // --- Toast Helper ---
   const showToast = (message, type = "success") => {
     setToast({ show: true, message, type });
     setTimeout(() => {
       setToast({ show: false, message: "", type: "success" });
     }, 4000);
+  };
+  const handleSearch = () => {
+    const value = searchTerm.trim();
+
+    if (!value) return;
+
+    setCurrentPage(1);
+    setSearchLoading(true);
+    setDebouncedSearch(value);
   };
 
   // --- Inline Location Handlers ---
@@ -110,14 +130,26 @@ const Inventory = () => {
     const rect = event.currentTarget.getBoundingClientRect();
 
     const dropdownHeight = 230;
+    const gap = 6;
+
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
 
-    setDropdownDirection(
+    const direction =
       spaceBelow < dropdownHeight && spaceAbove > dropdownHeight
         ? "up"
-        : "down"
-    );
+        : "down";
+
+    setDropdownDirection(direction);
+
+    setDropdownPosition({
+      left: rect.left,
+      width: Math.min(rect.width, 220),
+      top:
+        direction === "up"
+          ? rect.top - dropdownHeight - gap
+          : rect.bottom + gap,
+    });
 
     setEditingLocationId(item.id);
     setEditingLocation(item.location || "");
@@ -137,7 +169,32 @@ const Inventory = () => {
 
       await updateStockLocation(stockId, locationName);
 
-      await fetchStocks();
+      if (locationName.trim().toLowerCase() === "delivered") {
+        setInventory((prev) =>
+          prev.filter((item) => item.id !== stockId)
+        );
+
+        setSelectedIds((prev) =>
+          prev.filter((id) => id !== stockId)
+        );
+
+        setEditingLocationId(null);
+        setEditingLocation("");
+        setLocationDropdownOpen(false);
+
+        showToast("Vehicle marked as Delivered.", "success");
+
+        return;
+      }
+
+      // Normal location change
+      setInventory((prev) =>
+        prev.map((item) =>
+          item.id === stockId
+            ? { ...item, location: locationName }
+            : item
+        )
+      );
 
       setEditingLocationId(null);
       setEditingLocation("");
@@ -147,6 +204,7 @@ const Inventory = () => {
       setTimeout(() => {
         setRecentlySavedLocationId(null);
       }, 1000);
+
     } catch (error) {
       console.error("Failed to update location:", error);
       showToast("Failed to update location.", "error");
@@ -412,32 +470,27 @@ const Inventory = () => {
   const fetchStocks = async () => {
     const requestId = ++searchRequestIdRef.current;
     const searchQuery = debouncedSearch.trim();
+
     const isSearchRequest = searchQuery.length > 0;
+
     const isClearingSearch =
-      previousSearchRef.current.length > 0 && searchQuery.length === 0;
+      previousSearchRef.current.length > 0 &&
+      searchQuery.length === 0;
+
+    previousSearchRef.current = searchQuery;
 
     try {
-      if (isSearchRequest) {
-        // User is searching
+      if (isSearchRequest || isClearingSearch) {
         setSearchLoading(true);
-      } else if (isClearingSearch) {
-        // Search was cleared → full inventory reload
-        setLoading(false);
       } else if (inventory.length === 0) {
-        // Initial page load
         setLoading(true);
       } else {
-        // Normal pagination / refresh
         setPaginationLoading(true);
       }
-
       let finalStocks = [];
       let finalTotal = 0;
       let firstData = null;
 
-      // =========================================================
-      // SEARCH MODE
-      // =========================================================
       // =========================================================
       // SEARCH MODE
       // =========================================================
@@ -558,24 +611,15 @@ const Inventory = () => {
       );
 
     } finally {
-      setLoading(false);
-      setSearchLoading(false);
-      setPaginationLoading(false);
+      if (requestId === searchRequestIdRef.current) {
+        setLoading(false);
+        setSearchLoading(false);
+        setPaginationLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    const searchChanged =
-      previousSearchRef.current !== debouncedSearch;
-
-    previousSearchRef.current = debouncedSearch;
-
-    // Whenever a new search starts, always go to page 1 first.
-    if (searchChanged && currentPage !== 1) {
-      setCurrentPage(1);
-      return;
-    }
-
     fetchStocks();
 
     if (location.state?.showLoader) {
@@ -591,9 +635,7 @@ const Inventory = () => {
     debouncedSearch,
   ]);
   // Reset pagination to page 1 whenever the visible row count changes.
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedRows, debouncedSearch]);
+
 
   const filteredInventory = inventory;
 
@@ -649,6 +691,7 @@ const Inventory = () => {
 
   return (
     <>
+      <style>{scrollbarHideStyle}</style>
       {((loading && !searchLoading) || showLoader) && (
         <LeelamayiLoader
           loading={loading || showLoader}
@@ -694,70 +737,73 @@ const Inventory = () => {
       )}
 
       <div
-        className={`p-8 space-y-8 bg-[#F8FAFC] min-h-full transition-all duration-500 ${loading || showLoader ? "blur-sm pointer-events-none" : ""
+        className={`p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 bg-[#F8FAFC] min-h-full transition-all duration-500 ${loading || showLoader ? "blur-sm pointer-events-none" : ""
           }`}
       >
         {/* ================= Top Bar ================= */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="relative flex-1 max-w-xl">
-            <Search
-              className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors ${searchLoading
-                ? "text-slate-300"
-                : "text-slate-400"
-                }`}
-            />
-
-            <input
-              type="text"
-              placeholder="Search by Frame, Engine, Product, Model, Color, or Location..."
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="w-full sm:flex-1 sm:max-w-xl">
+            <CommonSearch
               value={searchTerm}
-              onChange={(e) =>
-                setSearchTerm(e.target.value)
-              }
-              className="w-full pl-10 pr-10 py-2.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 shadow-2xs transition-all"
-            />
+              onChange={(e) => {
+                const value = e.target.value;
 
-            {searchLoading && (
-              <Loader2 className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-emerald-500 animate-spin" />
-            )}
+                setSearchTerm(value);
 
-            {!searchLoading && searchTerm && (
-              <button
-                type="button"
-                onClick={() => {
+                // Clear only an already executed search
+                if (value.trim() === "" && debouncedSearch !== "") {
+                  setCurrentPage(1);
+                  setSelectedIds([]);
                   setSearchLoading(true);
-                  setSearchTerm("");
-                }} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors cursor-pointer"
-                aria-label="Clear search"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
+                  setDebouncedSearch("");
+                }
+              }}
+              onSearch={handleSearch}
+              onClear={() => {
+                const wasSearchActive = debouncedSearch.trim() !== "";
+
+                setSearchTerm("");
+                setCurrentPage(1);
+                setSelectedIds([]);
+
+                if (wasSearchActive) {
+                  setSearchLoading(true);
+                  setDebouncedSearch("");
+                } else {
+                  setDebouncedSearch("");
+                  setSearchLoading(false);
+                }
+              }}
+              isLoading={searchLoading}
+              placeholder="Search Frame, Engine, Product, Model, Color, or Location..."
+            />
           </div>
 
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setShowAddStock(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-[#0F172A] text-white rounded-lg hover:bg-slate-800 transition-all active:scale-[0.98] font-semibold text-xs tracking-wider uppercase shadow-2xs cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              New Stock
-            </button>
+          <div className="flex items-center justify-end gap-4 w-full sm:w-auto">
+            {userRole === "admin" && (
+              <button
+                onClick={() => setShowAddStock(true)}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-[#0F172A] text-white rounded-lg hover:bg-slate-800 transition-all active:scale-[0.98] font-semibold text-xs tracking-wider uppercase shadow-2xs cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                New Stock
+              </button>
+            )}
           </div>
         </div>
 
         {/* ================= Warehouse Clusters Header & Cards ================= */}
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
                 Stock Locations
               </h1>
               <p className="text-xs text-slate-500 mt-1">
                 Global overview of current stock levels across all regions
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 self-start sm:self-auto">
               {!viewAllRegions && warehouseClusters.length > 4 && (
                 <div className="flex items-center gap-1">
                   <button
@@ -797,19 +843,19 @@ const Inventory = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5">
             {visibleClusters.map((cluster, idx) => (
               <div
                 key={idx}
-                className="p-5 bg-white rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between"
+                className="p-4 sm:p-5 bg-white rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between min-w-0 overflow-hidden"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-500">
+                <div className="flex items-start justify-between gap-3 min-w-0">
+                  <div className="min-w-0 flex-1 pr-2">
+                    <p className="text-xs font-semibold text-slate-500 truncate" title={cluster.name}>
                       {cluster.name}
                     </p>
                     <div className="flex items-baseline gap-2 mt-2">
-                      <span className="text-3xl font-bold text-slate-900 tracking-tight">
+                      <span className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
                         {cluster.units}
                       </span>
                       <span className="text-[10px] font-bold text-slate-400 tracking-wider">
@@ -823,7 +869,7 @@ const Inventory = () => {
                   </div>
                 </div>
 
-                <div className="mt-6">
+                <div className="mt-5 sm:mt-6">
                   <div className="flex justify-end text-[11px] font-semibold text-slate-600 mb-1.5">
                     {cluster.percentage}%
                   </div>
@@ -841,10 +887,10 @@ const Inventory = () => {
 
         {/* ================= Live Inventory Stock Table ================= */}
         {!viewAllRegions && (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-visible">            {/* Table Header Controls */}
-            <div className="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <h2 className="text-lg font-bold text-slate-900 tracking-tight">
+          <div className="bg-white rounded-lg sm:rounded-xl border border-slate-200 shadow-2xs overflow-hidden">            {/* Table Header Controls */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
                   Live Inventory Stock
                 </h2>
 
@@ -867,7 +913,7 @@ const Inventory = () => {
                 </span>
               </div>
               {/*pdf export*/}
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
                 <ExportPDF
                   currentPage={currentPage}
                   totalPages={totalPages}
@@ -987,13 +1033,15 @@ const Inventory = () => {
                   </button>
                 )}
 
-                <div className="flex items-center gap-2 text-xs text-slate-400 font-medium ml-2">
+                <div className="flex items-center gap-2 text-xs text-slate-400 font-medium ml-0 sm:ml-2">
                   <span>ROWS:</span>
                   <div className="relative">
                     <select
                       value={selectedRows}
-                      onChange={(e) => setSelectedRows(Number(e.target.value))}
-                      className="appearance-none bg-white border border-slate-200 rounded-lg px-3 py-1.5 pr-7 text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer shadow-2xs"
+                      onChange={(e) => {
+                        setSelectedRows(Number(e.target.value));
+                        setCurrentPage(1);
+                      }} className="appearance-none bg-white border border-slate-200 rounded-lg px-3 py-1.5 pr-7 text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer shadow-2xs"
                     >
                       <option value={10}>10</option>
                       <option value={25}>25</option>
@@ -1006,15 +1054,14 @@ const Inventory = () => {
               </div>
             </div>
             {/* Table Body */}
-            <div className="relative overflow-visible">
+            <div className="relative overflow-x-auto overflow-y-visible scrollbar-hide">
               <div
                 className={`transition-all duration-200 ${paginationLoading || searchLoading
                   ? "opacity-50 blur-[1px]"
                   : "opacity-100 blur-0"
                   }`}
               >
-                <table className="w-full table-fixed text-left border-collapse">
-
+                <table className="w-full min-w-[1100px] table-auto text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50/50 border-b border-slate-100 text-[11px] font-bold text-slate-400 tracking-wider uppercase">
                       <th className="py-3  px-4 w-[4%]">
@@ -1054,27 +1101,27 @@ const Inventory = () => {
                         Actions
                       </th>
 
-                      <th className="py-3.5 px-3 w-[14%] whitespace-nowrap">
+                      <th className="py-3.5 px-3 w-[12%] whitespace-nowrap">
                         Product Name
                       </th>
 
-                      <th className="py-3.5 px-3 w-[14%] whitespace-nowrap">
+                      <th className="py-3.5 px-3 w-[12%] whitespace-nowrap">
                         Model Variant
                       </th>
 
-                      <th className="py-3.5 px-3 w-[13%] whitespace-nowrap">
+                      <th className="py-3.5 px-7 w-[12%] whitespace-nowrap">
                         Color
                       </th>
 
-                      <th className="py-3.5 px-7 w-[16%] whitespace-nowrap">
+                      <th className="py-3.5 px-4 min-w-[180px] whitespace-nowrap">
                         Location
                       </th>
 
-                      <th className="py-3.5 px-2 w-[9%] text-center whitespace-nowrap">
+                      <th className="py-3.5 px-2 w-[10%] text-center whitespace-nowrap">
                         MFG Date
                       </th>
 
-                      <th className="py-3.5 px-2.9 w-[9%] text-center whitespace-nowrap">
+                      <th className="py-3.5 px-2 w-[11%] text-center whitespace-nowrap">
                         Transfer Date
                       </th>
                     </tr>
@@ -1127,10 +1174,10 @@ const Inventory = () => {
                                 className="w-4 h-4 rounded border-slate-300 text-red-600 focus:ring-red-500/20 cursor-pointer transition-all hover:border-red-400 accent-red-600"
                               />
                             </td>
-                            <td className="py-3 px-4 font-semibold text-slate-800 font-mono text-[11px]">
+                            <td className="py-3 px-4 font-semibold text-slate-800 font-mono text-[11px] whitespace-nowrap">
                               {item.frameNo}
                             </td>
-                            <td className="py-3 px-4 font-semibold text-slate-800 font-mono text-[11px]">
+                            <td className="py-3 px-4 font-semibold text-slate-800 font-mono text-[11px] whitespace-nowrap">
                               {item.engineNo}
                             </td>
                             <td className="py-3.5 px-4">
@@ -1159,11 +1206,11 @@ const Inventory = () => {
 
                               </div>
                             </td>
-                            <td className="py-3 px-4 text-[11px] font-semibold text-slate-800 leading-tight">
+                            <td className="py-3 px-4 text-[11px] font-semibold text-slate-800 leading-tight break-words">
                               {item.productName || "-"}
                             </td>
 
-                            <td className="py-3 px-4 text-[11px] font-medium text-slate-700 leading-tight">
+                            <td className="py-3 px-4 text-[11px] font-medium text-slate-700 leading-tight break-words">
                               {item.modelVariant || "-"}
                             </td>
                             <td className="py-3 px-4 text-[11px] font-medium text-slate-700 min-w-[170px]">
@@ -1188,184 +1235,195 @@ const Inventory = () => {
                             </td>
 
                             {/* Inline Editable Location Cell */}
-                            <td className="py-2.5 px-4 text-slate-700 select-none align-middle">
-                              <div className="relative w-full">
-                                {editingLocationId === item.id ? (
-                                  <div
-                                    className="relative"
-                                    tabIndex={-1}
-                                    onBlur={(e) => {
-                                      if (
-                                        !e.currentTarget.contains(e.relatedTarget) &&
-                                        !savingLocation
-                                      ) {
-                                        setLocationDropdownOpen(false);
-                                        handleCancelEditLocation();
-                                      }
-                                    }}
-                                  >
+                            <td className="py-2.5 px-4 text-slate-700 select-none align-middle min-w-[180px]">                              <div className="relative w-full">
+                              {editingLocationId === item.id ? (
+                                <div
+                                  className="relative"
+                                  tabIndex={-1}
+                                  onBlur={(e) => {
+                                    if (
+                                      !e.currentTarget.contains(e.relatedTarget) &&
+                                      !savingLocation
+                                    ) {
+                                      setLocationDropdownOpen(false);
+                                      handleCancelEditLocation();
+                                    }
+                                  }}
+                                >
 
-                                    <div className="flex items-center gap-1">
+                                  <div className="flex items-center gap-1 min-w-0">
 
-                                      <div className="relative flex-1">
-
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            setLocationDropdownOpen((prev) => !prev)
-                                          }
-                                          disabled={savingLocation}
-                                          className="w-full h-9 flex items-center justify-between gap-2 px-3 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 hover:border-slate-300 focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-900/5 transition-all disabled:opacity-50"
-                                        >
-                                          <span className="truncate">
-                                            {editingLocation || "Select Location"}
-                                          </span>
-
-                                          <ChevronDown
-                                            className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${locationDropdownOpen ? "rotate-180" : ""
-                                              }`}
-                                          />
-                                        </button>
-
-                                        {locationDropdownOpen && (
-                                          <div
-                                            className={`absolute left-0 z-50 w-50 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-900/10 p-1.5 ${dropdownDirection === "up"
-                                              ? "bottom-[calc(100%+6px)]"
-                                              : "top-[calc(100%+6px)]"
-                                              }`}
-                                          >                                                      {warehouseClusters.map((cluster, i) => (
-                                            <button
-                                              key={i}
-                                              type="button"
-                                              onClick={() => {
-                                                setEditingLocation(cluster.name);
-                                                setLocationDropdownOpen(false);
-                                              }}
-                                              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold text-left transition-all ${editingLocation === cluster.name
-                                                ? "bg-slate-100 text-slate-900"
-                                                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                                }`}
-                                            >
-                                              <span className="truncate">
-                                                {cluster.name}
-                                              </span>
-
-                                              {editingLocation === cluster.name && (
-                                                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                              )}
-                                            </button>
-                                          ))}
-
-                                            <div className="my-1 border-t border-slate-100" />
-
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                setEditingLocation("Delivered");
-                                                setLocationDropdownOpen(false);
-                                              }}
-                                              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold text-left transition-all ${editingLocation === "Delivered"
-                                                ? "bg-emerald-50 text-emerald-700"
-                                                : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
-                                                }`}
-                                            >
-                                              <span className="flex items-center gap-2">
-                                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                                Delivered
-                                              </span>
-
-                                              {editingLocation === "Delivered" && (
-                                                <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                              )}
-                                            </button>
-
-                                          </div>
-                                        )}
-
-                                      </div>
+                                    <div className="relative flex-1 min-w-0">
 
                                       <button
                                         type="button"
                                         onClick={() =>
-                                          handleLocationSave(
-                                            item.id,
-                                            editingLocation
-                                          )
+                                          setLocationDropdownOpen((prev) => !prev)
                                         }
                                         disabled={savingLocation}
-                                        title="Save Location"
-                                        className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-50 cursor-pointer"
+                                        className="min-w-0 flex-1 w-full h-9 flex items-center justify-between gap-2 px-3 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 hover:border-slate-300 focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-900/5 transition-all disabled:opacity-50"
                                       >
-                                        {savingLocation ? (
-                                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                        ) : (
-                                          <Check className="w-3.5 h-3.5" />
-                                        )}
+                                        <span className="truncate">
+                                          {editingLocation || "Select Location"}
+                                        </span>
+
+                                        <ChevronDown
+                                          className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${locationDropdownOpen ? "rotate-180" : ""
+                                            }`}
+                                        />
                                       </button>
 
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setLocationDropdownOpen(false);
-                                          handleCancelEditLocation();
-                                        }}
-                                        disabled={savingLocation}
-                                        title="Cancel"
-                                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50 cursor-pointer"
-                                      >
-                                        <X className="w-3.5 h-3.5" />
-                                      </button>
+                                      {locationDropdownOpen && (
+                                        <div
+                                          className="fixed z-[9999] w-[200px] max-w-[calc(100vw-24px)] max-h-56 overflow-y-auto overscroll-contain bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-900/10 p-1.5"
+                                          style={{
+                                            top: dropdownPosition.top,
+                                            left: Math.min(
+                                              dropdownPosition.left,
+                                              window.innerWidth - dropdownPosition.width - 12
+                                            ),
+                                            width: dropdownPosition.width,
+                                          }}
+                                        >                                                {warehouseClusters.map((cluster, i) => (
+                                          <button
+                                            key={i}
+                                            type="button"
+                                            onClick={() => {
+                                              setEditingLocation(cluster.name);
+                                              setLocationDropdownOpen(false);
+                                            }}
+                                            className={`w-full min-w-0 flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg text-xs font-semibold text-left transition-all ${editingLocation === cluster.name
+                                              ? "bg-slate-100 text-slate-900"
+                                              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                              }`}
+                                          >
+                                            <span
+                                              className="min-w-0 flex-1 truncate pr-2"
+                                              title={cluster.name}
+                                            >
+                                              {cluster.name}
+                                            </span>
+
+                                            {editingLocation === cluster.name && (
+                                              <span className="w-4 h-4 shrink-0 flex items-center justify-center">
+                                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                              </span>
+                                            )}
+                                          </button>
+                                        ))}
+
+                                          <div className="my-1 border-t border-slate-100" />
+
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setEditingLocation("Delivered");
+                                              setLocationDropdownOpen(false);
+                                            }}
+                                            className={`w-full min-w-0 flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg text-xs font-semibold text-left transition-all ${editingLocation === "Delivered"
+                                              ? "bg-emerald-50 text-emerald-700"
+                                              : "text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
+                                              }`}
+                                          >
+                                            <span className="min-w-0 flex-1 flex items-center gap-2 truncate">
+                                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                                              <span className="truncate">Delivered</span>
+                                            </span>
+
+                                            {editingLocation === "Delivered" && (
+                                              <span className="w-4 h-4 shrink-0 flex items-center justify-center">
+                                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                              </span>
+                                            )}
+                                          </button>
+
+                                        </div>
+                                      )}
 
                                     </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleLocationSave(
+                                          item.id,
+                                          editingLocation
+                                        )
+                                      }
+                                      disabled={savingLocation}
+                                      title="Save Location"
+                                      className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-50 cursor-pointer"
+                                    >
+                                      {savingLocation ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      ) : (
+                                        <Check className="w-3.5 h-3.5" />
+                                      )}
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setLocationDropdownOpen(false);
+                                        handleCancelEditLocation();
+                                      }}
+                                      disabled={savingLocation}
+                                      title="Cancel"
+                                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50 cursor-pointer"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
 
                                   </div>
 
-                                ) : recentlySavedLocationId === item.id ? (
+                                </div>
 
-                                  <div className="flex items-center justify-between h-9 px-3 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 w-full">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                      <div className="min-w-0">
-                                        <span className="block text-xs font-bold truncate">
-                                          {item.location || "Unassigned"}
-                                        </span>
+                              ) : recentlySavedLocationId === item.id ? (
 
-                                      </div>
+                                <div className="flex items-center justify-between h-9 px-3 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 w-full">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                    <div className="min-w-0">
+                                      <span className="block text-xs font-bold truncate">
+                                        {item.location || "Unassigned"}
+                                      </span>
+
+                                    </div>
+                                  </div>
+                                </div>
+
+                              ) : (
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleStartEditLocation(item, e)}
+                                  disabled={
+                                    editingLocationId !== null &&
+                                    editingLocationId !== item.id
+                                  }
+                                  className={`group flex items-center justify-between gap-2 h-8 px-3 rounded-lg border border-slate-200/80 bg-slate-50/70 text-slate-700 w-full transition-all ${editingLocationId !== null &&
+                                    editingLocationId !== item.id
+                                    ? "opacity-40 cursor-not-allowed"
+                                    : "hover:bg-slate-100/80 hover:border-slate-300 hover:shadow-2xs cursor-pointer"
+                                    }`}
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+
+                                    <div className="min-w-0">
+                                      <span className="block text-xs font-bold text-slate-800 truncate">
+                                        {item.location || "Unassigned"}
+                                      </span>
+
                                     </div>
                                   </div>
 
-                                ) : (
+                                  <Pencil className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition-all shrink-0" />
+                                </button>
 
-                                  <button
-                                    type="button"
-                                    onClick={(e) => handleStartEditLocation(item, e)}
-                                    disabled={
-                                      editingLocationId !== null &&
-                                      editingLocationId !== item.id
-                                    }
-                                    className={`group flex items-center justify-between gap-2 h-8 px-3 rounded-lg border border-slate-200/80 bg-slate-50/70 text-slate-700 w-full transition-all ${editingLocationId !== null &&
-                                      editingLocationId !== item.id
-                                      ? "opacity-40 cursor-not-allowed"
-                                      : "hover:bg-slate-100/80 hover:border-slate-300 hover:shadow-2xs cursor-pointer"
-                                      }`}
-                                  >
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              )}
 
-                                      <div className="min-w-0">
-                                        <span className="block text-xs font-bold text-slate-800 truncate">
-                                          {item.location || "Unassigned"}
-                                        </span>
-
-                                      </div>
-                                    </div>
-
-                                    <Pencil className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition-all shrink-0" />
-                                  </button>
-
-                                )}
-
-                              </div>
+                            </div>
                             </td>
 
                             <td className="py-3 px-2 text-slate-500 font-medium text-[10px] whitespace-nowrap text-center">
@@ -1397,17 +1455,17 @@ const Inventory = () => {
 
             {/* ================= Table Pagination ================= */}
             {/* ================= Table Pagination ================= */}
-            <div className="p-4 border-t border-slate-100 flex items-center justify-between gap-4 text-xs font-medium text-slate-600">
+            <div className="p-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 text-xs font-medium text-slate-600">
 
               {/* Showing Count */}
-              <div className="whitespace-nowrap">
+              <div className="whitespace-nowrap w-full sm:w-auto">
                 Showing {totalItems === 0 ? 0 : startIndex + 1} to{" "}
                 {Math.min(startIndex + filteredInventory.length, totalItems)} of{" "}
                 {totalItems} entries
               </div>
 
               {/* Pagination */}
-              <div className="flex items-center gap-1 whitespace-nowrap">
+              <div className="flex items-center justify-end gap-1 whitespace-nowrap w-full sm:w-auto overflow-x-auto scrollbar-hide">
 
                 {/* Previous */}
                 <button

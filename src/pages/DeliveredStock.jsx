@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getDelivered } from "../api/delivered";
 import {
-  Search,
   ChevronLeft,
   ChevronRight,
   Truck,
@@ -12,6 +11,7 @@ import {
 } from "lucide-react";
 import LeelamayiLoader from "../components/LeelamayiLoader";
 import ExportPDF from "../components/ExportPDF";
+import CommonSearch from "../components/CommonSearch";
 
 
 export default function DeliveredStocksList() {
@@ -22,6 +22,8 @@ export default function DeliveredStocksList() {
 
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
+
+  const previousSearchRef = useRef("");
 
   // Pagination State
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -45,34 +47,76 @@ export default function DeliveredStocksList() {
     type: "success",
   });
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(filters.search);
-    }, 350);
+  const handleSearch = () => {
+    const value = filters.search.trim();
 
-    return () => clearTimeout(timer);
-  }, [filters.search]);
-  useEffect(() => {
+    if (!value) return;
+
+    setCurrentPage(1);
+    setSearchLoading(true);
+
+    previousSearchRef.current = value;
+
+    setDebouncedSearch(value);
+  };
+  //handleSearch + handleClearSearch
+  const handleClearSearch = () => {
+    const wasSearchActive =
+      previousSearchRef.current.trim() !== "";
+
+    setFilters((prev) => ({
+      ...prev,
+      search: "",
+    }));
+
     setCurrentPage(1);
 
-    if (!debouncedSearch.trim()) {
+    if (wasSearchActive) {
+      // Previously searched → clear → TABLE loader
+      setSearchLoading(true);
+      setDebouncedSearch("");
+    } else {
+      setDebouncedSearch("");
       setSearchLoading(false);
     }
+  };
+  useEffect(() => {
+    setCurrentPage(1);
   }, [debouncedSearch]);
   // delviers api 
   const fetchDelivered = async () => {
     const searchQuery = debouncedSearch.trim();
 
     try {
-      if (!hasLoadedOnce) {
-        setLoading(true);
-      } else if (searchQuery) {
-        setSearchLoading(true);
-      } else {
-        setPaginationLoading(true);
-        setLoading(false);
-      }
+      const isSearchRequest = searchQuery.length > 0;
 
+      const isClearingSearch =
+        previousSearchRef.current.trim() !== "" &&
+        searchQuery === "";
+
+      if (!hasLoadedOnce) {
+        // First page load → MAIN loader
+        setLoading(true);
+        setSearchLoading(false);
+        setPaginationLoading(false);
+      } else if (isSearchRequest) {
+        // Search → TABLE loader
+        setLoading(false);
+        setSearchLoading(true);
+        setPaginationLoading(false);
+      } else if (isClearingSearch) {
+        // Clear executed search → TABLE loader
+        setLoading(false);
+        setSearchLoading(true);
+        setPaginationLoading(false);
+
+        previousSearchRef.current = "";
+      } else {
+        // Pagination → TABLE loader
+        setLoading(false);
+        setSearchLoading(false);
+        setPaginationLoading(true);
+      }
       const response = await getDelivered(
         currentPage,
         rowsPerPage,
@@ -82,50 +126,6 @@ export default function DeliveredStocksList() {
         searchQuery
       );
       let data = response.data;
-
-      if (searchQuery && (!data.items || data.items.length === 0)) {
-        const fallbackResponse = await getDelivered(
-          1,
-          1000,
-          null,
-          null,
-          null,
-          ""
-        );
-        const fallbackData = fallbackResponse.data;
-
-        const fallbackItems = fallbackData.items || [];
-
-        const normalizedQuery = normalizeSearchValue(searchQuery)
-          .replace(/\s+/g, "");
-
-        const filteredItems = fallbackItems.filter((item) => {
-          const searchableText = [
-            item.Frame,
-            item["Engine No/Motor No"],
-            item["Product Name"],
-            item["Model Variant"],
-            item["Model Name"],
-            item.Color,
-            item.Location,
-          ]
-            .filter(Boolean)
-            .map((value) =>
-              normalizeSearchValue(value)
-            )
-            .join(" ")
-            .replace(/\s+/g, "");
-
-          return searchableText.includes(normalizedQuery);
-        });
-
-        data = {
-          ...fallbackData,
-          items: filteredItems,
-          filtered_total: filteredItems.length,
-        };
-      }
-
       setTotalDelivered(data.total_delivered);
       setTodayDelivered(data.today_delivered);
       setMonthDelivered(data.month_delivered);
@@ -465,38 +465,41 @@ export default function DeliveredStocksList() {
           </div>
         </div>
       )}
-      <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-3 md:p-6">
-        <div className="max-w-7xl mx-auto space-y-4">
-
+      <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 text-slate-800 font-sans p-3 md:p-6">
+        <div className="w-full max-w-7xl mx-auto space-y-4 min-w-0">
           {/* TOP HEADER - COMPACT SINGLE-LINE ORIENTED */}
-          <header className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <header className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 min-w-0">
             <div>
               <h1 className="text-xl font-bold text-slate-900 tracking-tight leading-none">
                 Delivered Stocks
               </h1>
-              <p className="text-xs text-slate-500 mt-1 whitespace-nowrap">
+              <p className="text-xs text-slate-500 mt-1">
                 Manage and monitor all successfully delivered vehicles.
               </p>
             </div>
 
-            <div className="flex items-center gap-3 self-start md:self-auto w-full md:w-auto">
-
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
               {/* Search */}
-              <div className="relative w-full md:w-[300px]">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-
-                <input
-                  type="text"
-                  placeholder="Search Frame No / Engine / Model..."
+              <div className="relative w-full sm:flex-1 xl:w-[400px] xl:flex-none">
+                <CommonSearch
                   value={filters.search}
-                  onChange={(e) =>
-                    setFilters({ ...filters, search: e.target.value })
-                  }
-                  className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-slate-900 focus:border-slate-900 bg-white text-slate-800"
+                  onChange={(e) => {
+                    const value = e.target.value;
+
+                    if (!value.trim() && previousSearchRef.current.trim()) {
+                      handleClearSearch();
+                      return;
+                    }
+                    setFilters((prev) => ({
+                      ...prev,
+                      search: value,
+                    }));
+                  }}
+                  onSearch={handleSearch}
+                  onClear={handleClearSearch}
+                  isLoading={searchLoading}
+                  placeholder="Search Frame No / Engine / Model..."
                 />
-                {searchLoading && (
-                  <Loader2 className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-emerald-500 animate-spin" />
-                )}
               </div>
 
               {/* Export PDF */}
@@ -536,7 +539,7 @@ export default function DeliveredStocksList() {
           </header>
 
           {/* STATISTICS CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
             <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs flex items-center justify-between">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
@@ -547,7 +550,7 @@ export default function DeliveredStocksList() {
                   Total Delivered Vehicles
                 </p>
               </div>
-              <div className="p-2.5 bg-slate-100 rounded-lg text-slate-600">
+              <div className="p-2.5 bg-blue-50 rounded-lg text-blue-600 border border-blue-100">
                 <Truck className="w-5 h-5" />
               </div>
             </div>
@@ -562,7 +565,7 @@ export default function DeliveredStocksList() {
                   Today's Delivered Vehicles
                 </p>
               </div>
-              <div className="p-2.5 bg-emerald-50 rounded-lg text-emerald-600 border border-emerald-100">
+              <div className="p-2.5 bg-blue-50 rounded-lg text-blue-600 border border-blue-100">
                 <CheckCircle2 className="w-5 h-5" />
               </div>
             </div>
@@ -581,36 +584,37 @@ export default function DeliveredStocksList() {
                 <Calendar className="w-5 h-5" />
               </div>
             </div>
-
             <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs flex items-center justify-between">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                  Total Records
+                  Delivery
                 </p>
-                <h3 className="text-xl font-bold text-slate-900 mt-0.5">
-                  {filteredTotal}
+
+                <h3 className="text-sm font-bold text-slate-900 mt-1">
+                  Ready for the Road
                 </h3>
-                <p className="text-[11px] text-blue-600 font-medium mt-0.5 whitespace-nowrap">
-                  Available Records
+
+                <p className="text-[11px] text-emerald-600 font-medium mt-0.5 whitespace-nowrap">
+                  Successfully Delivered
                 </p>
               </div>
+
               <div className="p-2.5 bg-blue-50 rounded-lg text-blue-600 border border-blue-100">
-                <AlertCircle className="w-5 h-5" />
+                <Truck className="w-5 h-5" />
               </div>
             </div>
           </div>
           {/* SINGLE-LINE TABLE WITH COMPACT HEADERS */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="relative overflow-hidden">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden w-full min-w-0">
+            <div className="relative w-full min-w-0 overflow-x-auto overflow-y-hidden">
 
               <div
                 className={`transition-all duration-200 ${paginationLoading || searchLoading
-                    ? "opacity-50 blur-[1px]"
-                    : "opacity-100 blur-0"
+                  ? "opacity-50 blur-[1px]"
+                  : "opacity-100 blur-0"
                   }`}
               >
-                <table className="w-full table-fixed text-left border-collapse">
-
+                <table className="w-full min-w-[1100px] text-left border-collapse">
                   {/* Header */}
                   <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                     <tr>
@@ -754,8 +758,7 @@ export default function DeliveredStocksList() {
 
             {/* PAGINATION FOOTER */}
             <div className="bg-white px-3 py-2.5 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
-              <div className="flex items-center space-x-2">
-                <span>Rows per page:</span>
+              <div className="flex items-center justify-center space-x-2 shrink-0">                <span>Rows per page:</span>
                 <select
                   value={rowsPerPage}
                   onChange={(e) => setRowsPerPage(Number(e.target.value))}
@@ -783,14 +786,13 @@ export default function DeliveredStocksList() {
                 entries
               </div>
 
-              <div className="flex items-center space-x-1">
-                <button
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage((prev) => prev - 1)}
-                  className="p-1 rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
+              <div className="flex items-center justify-center space-x-1 shrink-0">                <button
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((prev) => prev - 1)}
+                className="p-1 rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
 
                 {Array.from({ length: totalPages }, (_, i) => (
                   <button
