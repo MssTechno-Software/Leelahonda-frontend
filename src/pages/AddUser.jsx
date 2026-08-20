@@ -50,29 +50,29 @@ export default function AddUser() {
     { label: "User", value: "user" },
   ];
   //for loactions 
- const fetchLocations = async () => {
-  try {
-    setLocationsLoading(true);
+  const fetchLocations = async () => {
+    try {
+      setLocationsLoading(true);
 
-    const response = await getStocks("all");
+      const response = await getStocks("all");
 
-    const locationList = response?.data?.by_location || [];
+      const locationList = response?.data?.by_location || [];
 
-    const locationNames = locationList
-      .map((item) => item?.location)
-      .filter(Boolean);
+      const locationNames = locationList
+        .map((item) => item?.location)
+        .filter(Boolean);
 
-    setLocations([...new Set(locationNames)]);
-  } catch (error) {
-    console.error("Failed to fetch locations:", error);
-    setLocations([]);
-  } finally {
-    setLocationsLoading(false);
-  }
-};
+      setLocations([...new Set(locationNames)]);
+    } catch (error) {
+      console.error("Failed to fetch locations:", error);
+      setLocations([]);
+    } finally {
+      setLocationsLoading(false);
+    }
+  };
   useEffect(() => {
-  fetchLocations();
-}, []);
+    fetchLocations();
+  }, []);
   // Input Change Handler
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -139,7 +139,7 @@ export default function AddUser() {
       const payload = {
         first_name: formData.firstName,
         last_name: formData.lastName,
-        username: formData.username,
+        username: formData.email,
         password: formData.password,
         phone_no: formData.phone,
         location: formData.warehouse,
