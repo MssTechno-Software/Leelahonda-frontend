@@ -22,7 +22,6 @@ export default function AddUser() {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
-    username: '',
     email: '',
     phone: '',
     password: '',
@@ -90,7 +89,6 @@ export default function AddUser() {
 
     if (!formData.firstName.trim()) newErrors.firstName = 'First name is required.';
     if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required.';
-    if (!formData.username.trim()) newErrors.username = 'Username is required.';
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!formData.email.trim()) {
@@ -170,7 +168,6 @@ export default function AddUser() {
     setFormData({
       firstName: '',
       lastName: '',
-      username: '',
       email: '',
       phone: '',
       password: '',
@@ -277,27 +274,7 @@ export default function AddUser() {
                   )}
                 </div>
 
-                {/* Row 2: Username & Email Address */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Username <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="username"
-                    value={formData.username}
-                    onChange={handleChange}
-                    placeholder="john.doe"
-                    className={`w-full px-3 py-2 text-xs bg-slate-50 border ${errors.username ? 'border-rose-500 focus:ring-rose-200' : 'border-slate-200 focus:ring-[#0B1E48]/20 focus:border-[#0B1E48]'
-                      } rounded-lg focus:outline-none focus:ring-2 transition text-slate-800`}
-                  />
-                  {errors.username && (
-                    <div className="flex items-center gap-1.5 text-[12px] text-rose-600 bg-[#FEF2F2] border border-[#FCA5A5] p-2 rounded-lg mt-1.5 animate-fade-in">
-                      <FiAlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
-                      <span>{errors.username}</span>
-                    </div>
-                  )}
-                </div>
+                {/*Email Address */}
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
