@@ -167,7 +167,9 @@ const Inventory = () => {
     try {
       setSavingLocation(true);
 
-      await updateStockLocation(stockId, locationName);
+      const today = new Date().toISOString().split("T")[0];
+
+      await updateStockLocation(stockId, locationName, today);
 
       if (locationName.trim().toLowerCase() === "delivered") {
         setInventory((prev) =>
@@ -191,7 +193,11 @@ const Inventory = () => {
       setInventory((prev) =>
         prev.map((item) =>
           item.id === stockId
-            ? { ...item, location: locationName }
+            ? {
+              ...item,
+              location: locationName,
+              transferDate: today,
+            }
             : item
         )
       );
@@ -1284,33 +1290,34 @@ const Inventory = () => {
                                             ),
                                             width: dropdownPosition.width,
                                           }}
-                                        >                                                {warehouseClusters.map((cluster, i) => (
-                                          <button
-                                            key={i}
-                                            type="button"
-                                            onClick={() => {
-                                              setEditingLocation(cluster.name);
-                                              setLocationDropdownOpen(false);
-                                            }}
-                                            className={`w-full min-w-0 flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg text-xs font-semibold text-left transition-all ${editingLocation === cluster.name
-                                              ? "bg-slate-100 text-slate-900"
-                                              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                              }`}
-                                          >
-                                            <span
-                                              className="min-w-0 flex-1 truncate pr-2"
-                                              title={cluster.name}
+                                        >
+                                          {warehouseClusters.map((cluster, i) => (
+                                            <button
+                                              key={i}
+                                              type="button"
+                                              onClick={() => {
+                                                setEditingLocation(cluster.name);
+                                                setLocationDropdownOpen(false);
+                                              }}
+                                              className={`w-full min-w-0 flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg text-xs font-semibold text-left transition-all ${editingLocation === cluster.name
+                                                ? "bg-slate-100 text-slate-900"
+                                                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                                }`}
                                             >
-                                              {cluster.name}
-                                            </span>
-
-                                            {editingLocation === cluster.name && (
-                                              <span className="w-4 h-4 shrink-0 flex items-center justify-center">
-                                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                              <span
+                                                className="min-w-0 flex-1 truncate pr-2"
+                                                title={cluster.name}
+                                              >
+                                                {cluster.name}
                                               </span>
-                                            )}
-                                          </button>
-                                        ))}
+
+                                              {editingLocation === cluster.name && (
+                                                <span className="w-4 h-4 shrink-0 flex items-center justify-center">
+                                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                                </span>
+                                              )}
+                                            </button>
+                                          ))}
 
                                           <div className="my-1 border-t border-slate-100" />
 

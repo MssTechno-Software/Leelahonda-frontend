@@ -21,13 +21,13 @@ export const createStock = (data) =>
 export const updateStock = (id, data) =>
   API.put(`/update_stocks/${id}`, data);
 
-// patch api for instant changing location
-export const updateStockLocation = (stockId, location) => {
+// patch api for instant changing location + transfer date
+export const updateStockLocation = (stockId, location, transferDate) => {
   return API.patch(`/stocks/${stockId}/location`, {
     location,
+    "Stock Trasnfer Date": transferDate,
   });
 };
-
 // bulk upload
 export const bulkUploadStocks = (file, onProgress) => {
   const formData = new FormData();
