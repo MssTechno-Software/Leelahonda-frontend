@@ -305,20 +305,9 @@ const Inventory = () => {
 
       await fetchStocks();
 
-      showToast(
-        "Bulk upload completed successfully.",
-        "success"
-      );
-
       return response.data;
     } catch (error) {
       console.error(error);
-
-      showToast(
-        "Bulk upload failed.",
-        "error"
-      );
-
       throw error;
     }
   };

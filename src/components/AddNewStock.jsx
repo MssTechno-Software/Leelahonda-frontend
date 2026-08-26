@@ -24,10 +24,10 @@ const AddNewStock = ({
   editData,
   isEditMode,
   warehouses,
-  onRefreshList, 
-  showToast, 
+  onRefreshList,
+  showToast,
 }) => {
-  const [activeTab, setActiveTab] = useState("manual"); 
+  const [activeTab, setActiveTab] = useState("manual");
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -39,13 +39,24 @@ const AddNewStock = ({
   // State for post-upload API response analysis
   const [uploadResult, setUploadResult] = useState(null);
   const fileInputRef = useRef(null);
-  
+  const resultRef = useRef(null);
+  useEffect(() => {
+    if (uploadResult) {
+      requestAnimationFrame(() => {
+        resultRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      });
+    }
+  }, [uploadResult]);
+
   // Auto-hide error popup after 4.5 seconds
   useEffect(() => {
     if (errorMessage) {
       const timer = setTimeout(() => {
         setErrorMessage("");
-      }, 4500);
+      }, 7000);
       return () => clearTimeout(timer);
     }
   }, [errorMessage]);
@@ -106,6 +117,8 @@ const AddNewStock = ({
     }
   };
 
+
+  // Validate required fields before saving manual stock
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -140,13 +153,12 @@ const AddNewStock = ({
   };
 
   // Helper validation for file selection
+  // Validate the selected file before processing it
   const validateAndSetFile = (file) => {
     setFileError("");
     setErrorMessage("");
     setUploadResult(null);
-
     if (!file) return;
-
     const isCsv = file.type === "text/csv" || file.name.endsWith(".csv");
     const isExcel =
       file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
@@ -222,6 +234,8 @@ const AddNewStock = ({
     }
   };
 
+
+  // Define the required Excel columns for bulk inventory upload
   const REQUIRED_COLUMNS = [
     "Frame",
     "Engine No",
@@ -243,6 +257,7 @@ const AddNewStock = ({
   const normalizeCellValue = (value) =>
     value === null || value === undefined ? "" : value;
 
+  // Map Excel headers to the required inventory columns
   const getRequiredColumnMap = (headers) => {
     const normalizedHeaders = headers.map(normalizeHeader);
 
@@ -292,6 +307,7 @@ const AddNewStock = ({
     return { map, missing };
   };
 
+  // Read and validate the Excel/CSV file before sending it to the backend
   const validateAndNormalizeSpreadsheet = async (file) => {
     let workbook;
 
@@ -307,15 +323,13 @@ const AddNewStock = ({
         "Unable to read this spreadsheet. Please upload a valid CSV, XLSX or XLS file."
       );
     }
-
+    // Check that the uploaded workbook contains a worksheet
     const firstSheetName = workbook.SheetNames?.[0];
-
     if (!firstSheetName) {
       throw new Error("The uploaded file does not contain a worksheet.");
     }
 
     const worksheet = workbook.Sheets[firstSheetName];
-
     const rows = XLSX.utils.sheet_to_json(worksheet, {
       header: 1,
       defval: "",
@@ -323,6 +337,7 @@ const AddNewStock = ({
       blankrows: false,
     });
 
+    // Check that the worksheet contains data
     if (!rows.length) {
       throw new Error("The uploaded file is empty.");
     }
@@ -333,6 +348,7 @@ const AddNewStock = ({
 
     const { map, missing } = getRequiredColumnMap(headers);
 
+    // Check that all required column headers are present
     if (missing.length) {
       throw new Error(
         `Missing required column${missing.length > 1 ? "s" : ""}: ${missing.join(
@@ -346,6 +362,7 @@ const AddNewStock = ({
     // Reordered columns: ACCEPT.
     // Extra columns: IGNORE.
     // Empty required cells: ACCEPT and pass through to backend.
+    // Rebuild the spreadsheet using the required column order
     const normalizedRows = [REQUIRED_COLUMNS];
 
     for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
@@ -367,6 +384,7 @@ const AddNewStock = ({
       "Inventory"
     );
 
+    // Convert the normalized rows back into an Excel file
     const outputBuffer = XLSX.write(outputWorkbook, {
       bookType: "xlsx",
       type: "array",
@@ -434,6 +452,7 @@ const AddNewStock = ({
     }
   };
 
+  // Start bulk upload and validate the spreadsheet before sending it
   const handleBulkSubmit = async (e) => {
     e.preventDefault();
 
@@ -453,6 +472,7 @@ const AddNewStock = ({
         await validateAndNormalizeSpreadsheet(selectedFile);
 
 
+      // Send the normalized Excel file to the backend and track upload progress
       const response = await onBulkUpload(
         normalizedFile,
         (progress) => {
@@ -469,32 +489,64 @@ const AddNewStock = ({
       // Upload is complete; backend processing may still be finishing.
       setUploadProgress(0);
       setProcessingUpload(true);
-      setUploadResult(response || null);
+      setUploadProgress(0);
+      setProcessingUpload(true);
 
-      /*
-       * Refresh only after the upload API has successfully resolved.
-       * This keeps the old parent-controlled data flow intact.
-       */
+      const result = response || {};
+
+      setUploadResult(result);
+
       if (onRefreshList) {
         await onRefreshList();
       }
 
+      const created = Number(result.created ?? 0);
+      const skipped = Number(result.skipped_count ?? 0);
+      const errors = Number(result.error_count ?? 0);
+
+      // Backend returned row-level errors
+      if (skipped > 0 || errors > 0) {
+        const messages = [];
+
+        // Skipped records
+        if (Array.isArray(result.skipped)) {
+          result.skipped.forEach((item) => {
+            messages.push(
+              `Row ${item.row}: ${item.reason}`
+            );
+          });
+        }
+
+        // Validation errors
+        if (Array.isArray(result.errors)) {
+          result.errors.forEach((item) => {
+            messages.push(
+              `Row ${item.row}: ${item.error}`
+            );
+          });
+        }
+
+        // Show all backend errors in popup
+        setErrorMessage(messages.join(" | "));
+
+        return;
+      }
+      // Only close when everything is successful
       if (showToast) {
         showToast(
-          "Inventory records uploaded successfully",
+          `Successfully uploaded ${created} inventory record(s).`,
           "success"
         );
       }
 
-      // Clear selected file before closing.
       setSelectedFile(null);
 
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
 
-      // Close only after successful API response + refresh.
       onClose();
+      // Handle file preparation errors and backend/API failures
     } catch (err) {
       const status = err?.response?.status;
       const responseData = err?.response?.data;
@@ -541,11 +593,18 @@ const AddNewStock = ({
         {errorMessage && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4">
             <div className="flex items-center justify-between gap-3 p-3.5 bg-red-600 text-white rounded-xl shadow-xl border border-red-500/50">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <AlertCircle className="w-5 h-5 shrink-0 text-white" />
-                <p className="text-xs font-semibold leading-snug break-words whitespace-normal">
-                  {errorMessage}
-                </p>
+              <div className="flex items-start gap-2.5 min-w-0">
+                <AlertCircle className="w-5 h-5 shrink-0 text-white mt-0.5" />
+
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-white mb-1">
+                    Inventory Upload Errors
+                  </p>
+
+                  <p className="text-xs font-semibold leading-relaxed break-words whitespace-pre-line">
+                    {errorMessage}
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
@@ -858,8 +917,11 @@ const AddNewStock = ({
           </form>
         ) : (
           /* Tab Content: Bulk CSV Upload */
-          <form onSubmit={handleBulkSubmit} className="flex flex-col flex-1 min-h-0">
-            <div className="p-8 overflow-y-auto space-y-6 flex-1">
+          <form
+            onSubmit={handleBulkSubmit}
+            className="flex flex-col flex-1 min-h-0 overflow-hidden"
+          >
+            <div className="p-8 overflow-y-auto space-y-6 flex-1 min-h-0">
 
               {/* Upload Progress & Loading State Notice */}
               {uploading && (
@@ -1067,68 +1129,138 @@ const AddNewStock = ({
 
               {/* Backend API Detailed Response Summary & Error Report Download */}
               {uploadResult && (
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-                  <h5 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                    Import Breakdown Summary
-                  </h5>
+                <div
+                  ref={resultRef}
+                  className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4"
+                >
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {"importedCount" in uploadResult || "imported_count" in uploadResult ? (
-                      <div className="p-2.5 bg-white border border-slate-200 rounded-lg text-center">
-                        <p className="text-[10px] font-bold uppercase text-slate-400">Imported</p>
-                        <p className="text-base font-bold text-emerald-600">
-                          {uploadResult.importedCount ?? uploadResult.imported_count ?? 0}
-                        </p>
-                      </div>
-                    ) : null}
+                  {/* Result Header */}
+                  <div>
+                    <h5 className="text-sm font-bold text-slate-800">
+                      Import Result
+                    </h5>
 
-                    {"duplicateCount" in uploadResult || "duplicate_count" in uploadResult ? (
-                      <div className="p-2.5 bg-white border border-slate-200 rounded-lg text-center">
-                        <p className="text-[10px] font-bold uppercase text-slate-400">Duplicates</p>
-                        <p className="text-base font-bold text-amber-600">
-                          {uploadResult.duplicateCount ?? uploadResult.duplicate_count ?? 0}
-                        </p>
-                      </div>
-                    ) : null}
-
-                    {"skippedCount" in uploadResult || "skipped_count" in uploadResult ? (
-                      <div className="p-2.5 bg-white border border-slate-200 rounded-lg text-center">
-                        <p className="text-[10px] font-bold uppercase text-slate-400">Skipped</p>
-                        <p className="text-base font-bold text-slate-600">
-                          {uploadResult.skippedCount ?? uploadResult.skipped_count ?? 0}
-                        </p>
-                      </div>
-                    ) : null}
-
-                    {"failedCount" in uploadResult || "failed_count" in uploadResult ? (
-                      <div className="p-2.5 bg-white border border-slate-200 rounded-lg text-center">
-                        <p className="text-[10px] font-bold uppercase text-slate-400">Failed</p>
-                        <p className="text-base font-bold text-red-600">
-                          {uploadResult.failedCount ?? uploadResult.failed_count ?? 0}
-                        </p>
-                      </div>
-                    ) : null}
+                    {uploadResult.message && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        {uploadResult.message}
+                      </p>
+                    )}
                   </div>
 
-                  {/* Download Error Report Button (If provided by API) */}
-                  {(uploadResult.error_report_url || uploadResult.error_file) && (
-                    <div className="pt-2 flex justify-end">
-                      <a
-                        href={uploadResult.error_report_url || uploadResult.error_file}
-                        download="inventory_import_error_report.csv"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-all"
-                      >
-                        <Download className="w-3.5 h-3.5 text-red-600" />
-                        Download Error Report
-                      </a>
+                  {/* Summary */}
+                  <div className="grid grid-cols-3 gap-3">
+
+                    <div className="p-3 bg-white border border-emerald-200 rounded-lg text-center">
+                      <p className="text-[10px] font-bold uppercase text-slate-400">
+                        Created
+                      </p>
+
+                      <p className="text-xl font-bold text-emerald-600 mt-1">
+                        {uploadResult.created ?? 0}
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-white border border-amber-200 rounded-lg text-center">
+                      <p className="text-[10px] font-bold uppercase text-slate-400">
+                        Skipped
+                      </p>
+
+                      <p className="text-xl font-bold text-amber-600 mt-1">
+                        {uploadResult.skipped_count ?? 0}
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-white border border-red-200 rounded-lg text-center">
+                      <p className="text-[10px] font-bold uppercase text-slate-400">
+                        Errors
+                      </p>
+
+                      <p className="text-xl font-bold text-red-600 mt-1">
+                        {uploadResult.error_count ?? 0}
+                      </p>
+                    </div>
+
+                  </div>
+
+                  {/* Skipped */}
+                  {uploadResult.skipped?.length > 0 && (
+                    <div className="bg-white border border-amber-200 rounded-lg overflow-hidden">
+
+                      <div className="px-4 py-3 bg-amber-50 border-b border-amber-200">
+                        <h6 className="text-xs font-bold text-amber-800 uppercase">
+                          Skipped Records
+                        </h6>
+                      </div>
+
+                      <div className="divide-y divide-slate-100">
+                        {uploadResult.skipped.map((item, index) => (
+                          <div
+                            key={index}
+                            className="px-4 py-3 flex items-start gap-3"
+                          >
+                            <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5" />
+
+                            <div>
+                              <p className="text-xs font-semibold text-slate-700">
+                                Row {item.row}
+                              </p>
+
+                              <p className="text-xs text-slate-500 mt-1">
+                                {item.reason}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
                     </div>
                   )}
+
+                  {/* Errors */}
+                  {uploadResult.errors?.length > 0 && (
+                    <div className="bg-white border border-red-200 rounded-lg overflow-hidden">
+
+                      <div className="px-4 py-3 bg-red-50 border-b border-red-200">
+                        <h6 className="text-xs font-bold text-red-800 uppercase">
+                          Validation Errors
+                        </h6>
+                      </div>
+
+                      <div className="divide-y divide-slate-100">
+                        {uploadResult.errors.map((item, index) => (
+                          <div
+                            key={index}
+                            className="px-4 py-3 flex items-start gap-3"
+                          >
+                            <AlertCircle className="w-4 h-4 text-red-500 mt-0.5" />
+
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs font-semibold text-slate-700">
+                                  Row {item.row}
+                                </p>
+
+                                {item.frame && (
+                                  <span className="text-[11px] px-2 py-0.5 bg-slate-100 rounded-md text-slate-600">
+                                    {item.frame}
+                                  </span>
+                                )}
+                              </div>
+
+                              <p className="text-xs text-red-600 mt-1">
+                                {item.error}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                    </div>
+                  )}
+
                 </div>
               )}
             </div>
-
             {/* Modal Footer (Bulk Mode) */}
             <div className="px-8 py-5 bg-slate-50/80 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
               <p className="text-xs text-slate-500 text-center sm:text-left leading-relaxed">
