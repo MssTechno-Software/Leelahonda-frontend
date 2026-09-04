@@ -26,10 +26,54 @@ export const loginUser = async (username, password) => {
     localStorage.setItem("token_type", response.data.token_type);
   }
 
-  // for user role login 
+  // for user role login
   if (response.data.role) {
     localStorage.setItem("role", response.data.role);
   }
+
+  return response.data;
+};
+
+
+// Validate employee password setup / activation token
+export const validatePasswordSetupToken = async (token) => {
+  const response = await API.get(
+    "/auth/validate-password-setup-token",
+    {
+      params: {
+        token,
+      },
+    }
+  );
+
+  return response.data;
+};
+
+
+// Set password using the activation / setup token
+export const setPassword = async (
+  token,
+  password,
+  confirmPassword
+) => {
+  const response = await API.post(
+    "/auth/set-password",
+    {
+      token,
+      password,
+      confirm_password: confirmPassword,
+    }
+  );
+
+  return response.data;
+};
+
+
+// Resend activation / password setup link
+export const resendPasswordSetup = async (userId) => {
+  const response = await API.post(
+    `/auth/resend-password-setup/${userId}`
+  );
 
   return response.data;
 };

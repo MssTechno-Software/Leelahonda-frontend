@@ -119,7 +119,6 @@ export default function Login() {
 
     setLoading(true);
     setShowLoader(true);
-
     try {
       const data = await loginUser(trimmedEmail, formData.password);
 

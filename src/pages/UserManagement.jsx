@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getUsers, updateUser, deleteUser } from "../api/users";
+import { resendPasswordSetup } from "../api/auth";
 import { getStocks } from "../api/stocks";
 import {
   FiSearch,
@@ -41,20 +42,15 @@ export default function UserManagement() {
     lastName: '',
     email: '',
     phone: '',
-    password: '',
-    confirmPassword: '',
     role: '',
     location: ''
   });
-
-  //update passwrod states 
-  const [showUpdatePassword, setShowUpdatePassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
   const [editErrors, setEditErrors] = useState({});
   const [isUpdating, setIsUpdating] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
+
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
 
   // Custom Modal States
   const [deleteModalState, setDeleteModalState] = useState({ isOpen: false, user: null });
@@ -144,7 +140,7 @@ export default function UserManagement() {
     if (successModalState.isOpen) {
       const timer = setTimeout(() => {
         setSuccessModalState({ isOpen: false, message: '' });
-      }, 2000);
+      }, 5000);
       return () => clearTimeout(timer);
     }
   }, [successModalState.isOpen]);
@@ -196,14 +192,10 @@ export default function UserManagement() {
       lastName: user.lastName || '',
       email: user.email || '',
       phone: user.phone || '',
-      password: '',
-      confirmPassword: '',
       role: user.role || '',
       location: user.location || ''
     });
-    setShowUpdatePassword(false);
-    setShowNewPassword(false);
-    setShowConfirmPassword(false);
+
     setEditErrors({});
   };
 
@@ -233,21 +225,6 @@ export default function UserManagement() {
     } else if (!phoneRegex.test(editFormData.phone.trim())) {
       newErrors.phone = 'Please enter a valid phone number.';
     }
-
-    if (editFormData.password) {
-      if (editFormData.password.length < 8) {
-        newErrors.password = 'Password must be at least 8 characters long.';
-      }
-
-      if (!editFormData.confirmPassword) {
-        newErrors.confirmPassword = 'Please confirm the new password.';
-      } else if (editFormData.password !== editFormData.confirmPassword) {
-        newErrors.confirmPassword = 'Passwords do not match.';
-      }
-    } else if (editFormData.confirmPassword) {
-      newErrors.password = 'Please enter the new password.';
-    }
-
     if (!editFormData.role) newErrors.role = 'Role selection is required.';
     if (!editFormData.location) newErrors.location = 'Warehouse/Location selection is required.';
 
@@ -290,74 +267,36 @@ export default function UserManagement() {
       setIsUpdating(false);
     }
   };
-  // Update Password API
-  const handlePasswordUpdate = async () => {
-    const newErrors = {};
-
-    if (!editFormData.password) {
-      newErrors.password = 'Please enter the new password.';
-    } else if (editFormData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters long.';
-    }
-
-    if (!editFormData.confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm the new password.';
-    } else if (
-      editFormData.password !== editFormData.confirmPassword
-    ) {
-      newErrors.confirmPassword = 'Passwords do not match.';
-    }
-
-    setEditErrors((prev) => ({
-      ...prev,
-      password: newErrors.password || null,
-      confirmPassword: newErrors.confirmPassword || null,
-    }));
-
-    if (Object.keys(newErrors).length > 0) {
-      return;
-    }
+  //reset api 
+  const handleResetPasswordLink = async () => {
+    if (!editingUser?.id) return;
 
     try {
-      setIsUpdating(true);
+      setIsResettingPassword(true);
 
-      await updateUser(editingUser.id, {
-        password: editFormData.password,
-      });
+      await resendPasswordSetup(editingUser.id);
 
-      setShowUpdatePassword(false);
-      setShowNewPassword(false);
-      setShowConfirmPassword(false);
-
-      setEditFormData((prev) => ({
-        ...prev,
-        password: '',
-        confirmPassword: '',
-      }));
-
-      setEditErrors((prev) => ({
-        ...prev,
-        password: null,
-        confirmPassword: null,
-      }));
-
+      setShowResetPasswordModal(false);
+      
       setSuccessModalState({
         isOpen: true,
-        message: 'Password updated successfully.',
+        message: `Password reset link has been sent to ${editingUser.email}.`,
       });
-
     } catch (error) {
-      console.error('Update Password Error:', error);
+      console.error("Reset Password Link Error:", error);
 
       const backendMessage = error?.response?.data?.detail;
 
+      setShowResetPasswordModal(false);
+
       setErrorModalState({
         isOpen: true,
-        message: backendMessage || 'Failed to update password.',
+        message:
+          backendMessage ||
+          "Failed to send password reset link.",
       });
-
     } finally {
-      setIsUpdating(false);
+      setIsResettingPassword(false);
     }
   };
 
@@ -673,7 +612,7 @@ export default function UserManagement() {
         </div>
 
         {/* Edit User Modal */}
-        {editingUser && !showUpdatePassword && (
+        {editingUser && !showResetPasswordModal && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
               <div className="bg-[#0B1E48] text-white p-4 flex items-center justify-between">
@@ -817,24 +756,14 @@ export default function UserManagement() {
                       </p>
                     )}
                   </div>
-                  {/* Update Password Trigger */}
+                  {/* Reset Password Link */}
                   <div className="md:col-span-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        setShowUpdatePassword(true);
-                        setShowNewPassword(false);
-                        setShowConfirmPassword(false);
-
-                        setEditErrors((prev) => ({
-                          ...prev,
-                          password: null,
-                          confirmPassword: null,
-                        }));
-                      }}
+                      onClick={() => setShowResetPasswordModal(true)}
                       className="text-xs pl-1.5 font-semibold text-[#0B1E48] hover:text-blue-700 hover:underline transition"
                     >
-                      Update Password
+                      Reset Password 
                     </button>
                   </div>
                 </div>
@@ -868,183 +797,75 @@ export default function UserManagement() {
             </div>
           </div>
         )}
-        {/* UPDATE PASSWORD MODAL */}
-        {showUpdatePassword && (
+        {/* RESET PASSWORD LINK MODAL */}
+        {showResetPasswordModal && editingUser && (
           <div className="fixed inset-0 z-[70] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-
             <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
 
-              {/* Header */}
-              <div className="bg-[#0B1E48] text-white px-5 py-4 flex items-center justify-between">
+              <div className="bg-[#0B1E48] text-white px-5 py-4">
+                <p className="text-[10px] uppercase font-mono tracking-wider text-slate-300">
+                  USER MANAGEMENT
+                </p>
 
-                <div>
-                  <p className="text-[10px] uppercase font-mono tracking-wider text-slate-300">
-                    USER MANAGEMENT
-                  </p>
-
-                  <h3 className="text-base font-bold">
-                    UPDATE PASSWORD
-                  </h3>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowUpdatePassword(false);
-                    setShowNewPassword(false);
-                    setShowConfirmPassword(false);
-
-                    setEditFormData((prev) => ({
-                      ...prev,
-                      password: '',
-                      confirmPassword: '',
-                    }));
-
-                    setEditErrors((prev) => ({
-                      ...prev,
-                      password: null,
-                      confirmPassword: null,
-                    }));
-                  }}
-                  className="p-1 hover:bg-white/10 rounded transition text-slate-300 hover:text-white"
-                >
-                  <FiX className="w-5 h-5" />
-                </button>
+                <h3 className="text-base font-bold">
+                  RESET PASSWORD LINK
+                </h3>
               </div>
 
-              {/* Body */}
-              <div className="p-5 space-y-4">
+              <div className="p-5">
 
-                {/* New Password */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    New Password <span className="text-rose-500">*</span>
-                  </label>
-                  <div className="relative">
+                <p className="text-xs text-slate-600 leading-5">
+                  Send a secure password setup link to this user's
+                  registered email address. The employee will use the
+                  link to create their own password.
+                </p>
 
-                    <input
-                      type={showNewPassword ? "text" : "password"}
-                      name="password"
-                      value={editFormData.password}
-                      onChange={handleEditChange}
-                      placeholder="Enter new password"
-                      className={`w-full px-3 py-2 pr-10 text-xs bg-slate-50 border ${editErrors.password
-                        ? 'border-rose-500'
-                        : 'border-slate-200 focus:border-[#0B1E48]'
-                        } rounded-lg focus:outline-none transition text-slate-800`}
-                    />
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
 
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPassword((prev) => !prev)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
-                      aria-label={
-                        showNewPassword
-                          ? "Hide new password"
-                          : "Show new password"
-                      }
-                    >
-                      {showNewPassword ? (
-                        <FiEyeOff className="w-4 h-4" />
-                      ) : (
-                        <FiEye className="w-4 h-4" />
-                      )}
-                    </button>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-400">
+                    Registered Email
+                  </p>
 
-                  </div>
-
-                  {editErrors.password && (
-                    <p className="flex items-center gap-1 text-[11px] text-rose-500 mt-1">
-                      <FiAlertCircle className="w-3 h-3" />
-                      {editErrors.password}
-                    </p>
-                  )}
+                  <p className="mt-1 text-xs font-semibold text-slate-800 break-all">
+                    {editingUser.email}
+                  </p>
 
                 </div>
 
-                {/* Confirm Password */}
-                <div>
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
 
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Confirm Password <span className="text-rose-500">*</span>
-                  </label>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-400">
+                    What happens next?
+                  </p>
 
-                  <div className="relative">
-
-                    <input
-                      type={showConfirmPassword ? "text" : "password"}
-                      name="confirmPassword"
-                      value={editFormData.confirmPassword}
-                      onChange={handleEditChange}
-                      placeholder="Confirm new password"
-                      className={`w-full px-3 py-2 pr-10 text-xs bg-slate-50 border ${editErrors.confirmPassword
-                        ? 'border-rose-500'
-                        : 'border-slate-200 focus:border-[#0B1E48]'
-                        } rounded-lg focus:outline-none transition text-slate-800`}
-                    />
-
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword((prev) => !prev)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
-                      aria-label={
-                        showConfirmPassword
-                          ? "Hide confirm password"
-                          : "Show confirm password"
-                      }
-                    >
-                      {showConfirmPassword ? (
-                        <FiEyeOff className="w-4 h-4" />
-                      ) : (
-                        <FiEye className="w-4 h-4" />
-                      )}
-                    </button>
-
-                  </div>
-
-                  {editErrors.confirmPassword && (
-                    <p className="flex items-center gap-1 text-[11px] text-rose-500 mt-1">
-                      <FiAlertCircle className="w-3 h-3" />
-                      {editErrors.confirmPassword}
-                    </p>
-                  )}
+                  <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                    A secure link will be sent to the employee.
+                    They can use the link to set a new password.
+                    Administrators cannot view the employee's password.
+                  </p>
 
                 </div>
 
-                {/* Buttons */}
-                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-slate-100">
 
                   <button
                     type="button"
-                    onClick={() => {
-                      setShowUpdatePassword(false);
-                      setShowNewPassword(false);
-                      setShowConfirmPassword(false);
-
-                      setEditFormData((prev) => ({
-                        ...prev,
-                        password: '',
-                        confirmPassword: '',
-                      }));
-
-                      setEditErrors((prev) => ({
-                        ...prev,
-                        password: null,
-                        confirmPassword: null,
-                      }));
-                    }}
-                    className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg shadow-sm transition"
+                    onClick={() => setShowResetPasswordModal(false)}
+                    disabled={isResettingPassword}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition disabled:opacity-50"
                   >
                     Cancel
                   </button>
 
                   <button
                     type="button"
-                    onClick={handlePasswordUpdate}
-                    disabled={isUpdating}
-                    className="px-5 py-2 text-xs font-bold text-white bg-[#0B1E48] hover:bg-[#071330] rounded-lg shadow-sm transition disabled:opacity-50"
+                    onClick={handleResetPasswordLink}
+                    disabled={isResettingPassword}
+                    className="px-5 py-2 text-xs font-bold text-white bg-[#0B1E48] hover:bg-[#071330] rounded-lg transition disabled:opacity-50"
                   >
-                    {isUpdating ? "Updating..." : "Update Password"}
+                    {isResettingPassword
+                      ? "Sending..."
+                      : "Send Reset Link"}
                   </button>
 
                 </div>

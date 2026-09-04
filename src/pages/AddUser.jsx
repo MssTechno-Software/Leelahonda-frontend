@@ -10,8 +10,6 @@ import {
   FiSave,
   FiCheckCircle,
   FiAlertCircle,
-  FiEye,
-  FiEyeOff,
   FiXCircle,
 } from 'react-icons/fi';
 
@@ -24,13 +22,11 @@ export default function AddUser() {
     lastName: '',
     email: '',
     phone: '',
-    password: '',
     role: '',
     warehouse: ''
   });
 
-  // Password Visibility Toggle State
-  const [showPassword, setShowPassword] = useState(false);
+
   const [locations, setLocations] = useState([]);
   const [locationsLoading, setLocationsLoading] = useState(false);
 
@@ -103,13 +99,6 @@ export default function AddUser() {
     } else if (!phoneRegex.test(formData.phone.trim())) {
       newErrors.phone = 'Please enter a valid phone number.';
     }
-
-    if (!formData.password) {
-      newErrors.password = 'Password is required.';
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters long.';
-    }
-
     if (!formData.role) newErrors.role = 'Role selection is required.';
     if (!formData.warehouse) newErrors.warehouse = 'Warehouse selection is required.';
 
@@ -138,25 +127,44 @@ export default function AddUser() {
         first_name: formData.firstName,
         last_name: formData.lastName,
         username: formData.email,
-        password: formData.password,
+        email: formData.email,
         phone_no: formData.phone,
         location: formData.warehouse,
         role: formData.role,
       };
-
       await createUser(payload);
 
       setShowSuccessModal(true);
 
-      setTimeout(() => {
-        handleSuccessClose();
-      }, 2000);
-
     } catch (error) {
       console.error("Create User Error:", error);
-      setErrorMessage(
-        error?.response?.data?.detail || "Failed to create user. Please try again."
-      );
+
+      const detail = error?.response?.data?.detail;
+
+      let message = "Failed to create user. Please try again.";
+
+      if (typeof detail === "string") {
+        message = detail;
+      } else if (Array.isArray(detail)) {
+        message = detail
+          .map((item) => {
+            if (typeof item === "string") {
+              return item;
+            }
+
+            return item?.msg || "Validation error";
+          })
+          .join(", ");
+      } else if (detail && typeof detail === "object") {
+        message =
+          detail?.msg ||
+          detail?.message ||
+          "Failed to create user. Please check the entered details.";
+      } else if (error?.response?.data?.message) {
+        message = error.response.data.message;
+      }
+
+      setErrorMessage(message);
       setShowErrorModal(true);
     } finally {
       setIsSubmitting(false);
@@ -170,7 +178,6 @@ export default function AddUser() {
       lastName: '',
       email: '',
       phone: '',
-      password: '',
       role: '',
       warehouse: ''
     });
@@ -297,7 +304,7 @@ export default function AddUser() {
                   )}
                 </div>
 
-                {/* Row 3: Phone Number & Password */}
+                {/* Row 3: Phone Number*/}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Phone Number <span className="text-rose-500">*</span>
@@ -318,42 +325,6 @@ export default function AddUser() {
                     </div>
                   )}
                 </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Password <span className="text-rose-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      name="password"
-                      value={formData.password}
-                      onChange={handleChange}
-                      placeholder="••••••••"
-                      className={`w-full pl-3 pr-9 py-2 text-xs bg-slate-50 border ${errors.password ? 'border-rose-500 focus:ring-rose-200' : 'border-slate-200 focus:ring-[#0B1E48]/20 focus:border-[#0B1E48]'
-                        } rounded-lg focus:outline-none focus:ring-2 transition text-slate-800`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((prev) => !prev)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none transition"
-                      tabIndex="-1"
-                    >
-                      {showPassword ? (
-                        <FiEyeOff className="w-4 h-4" />
-                      ) : (
-                        <FiEye className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-                  {errors.password && (
-                    <div className="flex items-center gap-1.5 text-[12px] text-rose-600 bg-[#FEF2F2] border border-[#FCA5A5] p-2 rounded-lg mt-1.5 animate-fade-in">
-                      <FiAlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
-                      <span>{errors.password}</span>
-                    </div>
-                  )}
-                </div>
-
                 {/* Row 4: Role & Warehouse */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -383,7 +354,7 @@ export default function AddUser() {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Locations <span className="text-rose-500">*</span>
+                    Location <span className="text-rose-500">*</span>
                   </label>
                   <select
                     name="warehouse"
@@ -467,21 +438,44 @@ export default function AddUser() {
 
             {/* Content */}
             <div className="px-6 pt-4 pb-6 text-center">
-
               <h3 className="text-[15px] font-bold text-slate-800">
                 User Created Successfully
               </h3>
 
               <p className="mt-2 text-[12px] leading-5 text-slate-500">
-                The new user has been created successfully.
+                The employee account has been created successfully.
               </p>
+
+              <div className="mt-4 rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3 text-left">
+                <p className="text-[11px] font-semibold text-emerald-800">
+                  Password Setup Link Sent
+                </p>
+
+                <p className="mt-1 text-[11px] leading-5 text-emerald-700">
+                  A secure password setup link has been sent to{" "}
+                  <span className="font-semibold">
+                    {formData.email}
+                  </span>
+                  . The employee can use this link to create their own password.
+                </p>
+              </div>
+
+              <div className="mt-3 flex items-start gap-2 text-left">
+                <FiCheckCircle className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+
+                <p className="text-[10px] leading-4 text-slate-400">
+                  For security, the employee's password is never visible
+                  to administrators.
+                </p>
+              </div>
+
 
               <button
                 type="button"
                 onClick={handleSuccessClose}
                 className="mt-5 w-full h-10 rounded-lg bg-[#0B1E48] hover:bg-[#071330] text-white text-xs font-semibold shadow-sm transition-all duration-200"
               >
-                OK
+                Done
               </button>
 
             </div>

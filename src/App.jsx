@@ -6,6 +6,7 @@ import { setSessionExpiredHandler } from "./api/api";
 
 
 import Login from "./pages/Login";
+import SetPassword from "./pages/SetPassword";
 import Inventory from "./pages/Inventory";
 import AuditManagement from "./pages/AuditManagement";
 import DeliveredStock from "./pages/DeliveredStock";
@@ -29,58 +30,59 @@ function App() {
 
     return () => clearTimeout(timer);
   }, []);
-//session expries
+  //session expries
   useEffect(() => {
-  setSessionExpiredHandler(() => {
-    setSessionExpired(true);
-  });
-}, []);
-const handleLoginAgain = () => {
-  localStorage.removeItem("access_token");
-  localStorage.removeItem("refresh_token");
-  localStorage.removeItem("user");
+    setSessionExpiredHandler(() => {
+      setSessionExpired(true);
+    });
+  }, []);
+  const handleLoginAgain = () => {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("user");
 
-  setSessionExpired(false);
+    setSessionExpired(false);
 
-  navigate("/", {
-    replace: true,
-  });
-};
+    navigate("/", {
+      replace: true,
+    });
+  };
 
   if (loading) {
     return <LeelamayiLoader loading={loading} />;
   }
 
- return (
-  <>
-    <Routes>
-      {/* Public Route */}
-      <Route path="/" element={<Login />} />
+  return (
+    <>
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/" element={<Login />} />
+        <Route path="/set-password" element={<SetPassword />} />
 
-      {/* Protected Routes */}
-      <Route
-        element={
-          <ProtectedRoute>
-            <MainLayout />
-          </ProtectedRoute>
-        }
-      >
-        <Route path="/inventory" element={<Inventory />} />
-        <Route path="/audit-management" element={<AuditManagement />} />
-        <Route path="/delivered" element={<DeliveredStock />} />
-        <Route path="/track" element={<DeliveryTracking />} />
-        <Route path="/users" element={<UserManagement />} />
-        <Route path="/users/add" element={<AddUser />} />
-      </Route>
-    </Routes>
+        {/* Protected Routes */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <MainLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/inventory" element={<Inventory />} />
+          <Route path="/audit-management" element={<AuditManagement />} />
+          <Route path="/delivered" element={<DeliveredStock />} />
+          <Route path="/track" element={<DeliveryTracking />} />
+          <Route path="/users" element={<UserManagement />} />
+          <Route path="/users/add" element={<AddUser />} />
+        </Route>
+      </Routes>
 
-    <SessionExpiredModal
-      isOpen={sessionExpired}
-      onLogin={handleLoginAgain}
-    />
-    
-  </>
-);
+      <SessionExpiredModal
+        isOpen={sessionExpired}
+        onLogin={handleLoginAgain}
+      />
+
+    </>
+  );
 }
 
 export default App;
